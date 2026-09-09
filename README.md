@@ -2,6 +2,18 @@
 
 A Python/Streamlit research tool for asking a specific CRISPR design question: **can one SpCas9 spacer plausibly target every member of a user-defined plant gene set?** The tool searches exact shared targets and mismatch-aware consensus targets, preserves sequence provenance, validates every candidate, and makes its search limits explicit.
 
+## Live app and related projects
+
+**Run the Plant MultiGene app:** https://plant-multigene-grna-designer.onrender.com/
+
+**GitHub repository:** https://github.com/abdulbasitbehlim/Plant-MultiGene-gRNA-Designer
+
+**Also available — OpenCRISPR-1 gRNA Designer:**
+- Live app: https://opencrispr1-grna-designer.onrender.com/
+- GitHub: https://github.com/abdulbasitbehlim/OpenCRISPR1-gRNA-Designer
+
+> The Render free tier may sleep after inactivity, so the first load can take longer while the service wakes up.
+
 ## Statement of need
 
 Single-gene CRISPR designers are optimized for choosing guides against one locus. Plant functional redundancy often requires a different workflow: a researcher may want one sgRNA that intentionally recognizes several homologous genes. CRISPR MultiTargeter, CRISPys and Multi-Knock established this multi-target design problem, but reproducible interpretation still depends on target provenance, exon boundaries, mismatch assumptions and search semantics. This project provides a small, auditable workflow that keeps those decisions visible instead of reporting an unexplained universal score. It is intended for research prioritization and teaching, not as a substitute for genome-wide off-target analysis or experimental validation.

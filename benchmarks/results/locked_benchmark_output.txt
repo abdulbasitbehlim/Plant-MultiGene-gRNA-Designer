@@ -1,0 +1,17 @@
+{
+  "benchmark": "Hu 2023 PUP7/PUP8/PUP21 validation-construct sequence regression",
+  "evidence_class": "published follow-up validation construct; transportome-library membership unverified",
+  "published_spacers_tested": 1,
+  "exact_spacer_recovered": 1,
+  "exact_spacer_recovery_percent": 100.0,
+  "published_spacer": "CTCTACTTTCTCCCTCATCT",
+  "generated_rank": 1,
+  "total_candidates_generated": 1,
+  "genes_with_exact_target_sequence": 2,
+  "genes_with_pam_compatible_target": 3,
+  "worst_mismatch_count": 1,
+  "library_membership_verified": false,
+  "library_guide_rediscovery_claim": false,
+  "rediscovery_definition": "exact spacer recovery requires identical 20-nt sequence; mismatch tolerance is reported separately",
+  "scope": "deterministic locus-level validation-construct regression; not a verified 5,635-guide library benchmark"
+}

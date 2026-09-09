@@ -1,0 +1,3 @@
+tool,input,status,found_by_both,ours_only,external_only,reason
+CRISPys,Hu PUP validation trio,published-method reference only,not claimed,not claimed,not claimed,Multi-Knock reports CRISPys-based library design; rerun required on frozen inputs
+CRISPR MultiTargeter,Hu PUP validation trio,adapter prepared/not executed,not claimed,not claimed,not claimed,external service not reproducibly executable in build environment

@@ -1,0 +1,33 @@
+{
+  "benchmark_id": "hu2023_pup_validation_construct_2023",
+  "paper": "Hu et al., Nature Plants 2023, Multi-Knock",
+  "doi": "10.1038/s41477-023-01374-4",
+  "published_guide": "CTCTACTTTCTCCCTCATCT",
+  "genes": [
+    {
+      "symbol": "PUP7",
+      "locus": "AT4G18197",
+      "refseq": "NM_001036586.3"
+    },
+    {
+      "symbol": "PUP8",
+      "locus": "AT4G18195",
+      "refseq": "NM_001036585.3"
+    },
+    {
+      "symbol": "PUP21",
+      "locus": "AT4G18205",
+      "refseq": "NM_001036587.3"
+    }
+  ],
+  "fixture_scope": "Locked regression fixture checks whether the designer can regenerate the published validation-construct spacer from target contexts. It is not a 5,635-guide library benchmark and not a full-current-database benchmark.",
+  "build_environment_live_status": "not_executed_network_unavailable",
+  "evidence_class": "published post-screen validation construct; not verified as a member of the 5,635-guide transportome library",
+  "library_membership_verified": false,
+  "library_rediscovery_claim_allowed": false,
+  "paper_method_statement": "The Methods state that the 20 nt protospacer CTCTACTTTCTCCCTCATCT was picked to target PUP7, PUP8 and PUP21 at once.",
+  "paper_figure_distinction": "Figure 5 states that the screen-derived CR8/21 sgRNA was not designed to target PUP7 because PUP7 lacks the respective PAM for that guide; CR8/21 is the PUP8/PUP21 double-mutant line.",
+  "interpretation": "The published sequence used here is therefore treated as a separate PUP7/PUP8/PUP21 validation construct, not as a verified guide from the transportome library. Direct Supplementary Data 1 inspection is required before any library-membership or library-rediscovery claim.",
+  "rediscovery_definition": "Exact spacer recovery means the design algorithm emits the identical 20-nt published spacer. Target compatibility (exact matches, mismatches and PAMs per gene) is reported separately and does not change exact sequence identity.",
+  "supplementary_data_1_direct_inspection_status": "not directly retrieved in the v1.3.1 artifact environment; Nature landing page identifies Supplementary Data 1 as the all-family sgRNA library, so library membership remains unverified here."
+}

@@ -6,6 +6,8 @@ A Python/Streamlit research tool for asking a specific CRISPR design question: *
 
 **Run the Plant MultiGene app:** https://plant-multigene-grna-designer.onrender.com/
 
+**Give feedback:** https://github.com/abdulbasitbehlim/Plant-MultiGene-gRNA-Designer/issues/new?template=feedback.yml
+
 **GitHub repository:** https://github.com/abdulbasitbehlim/Plant-MultiGene-gRNA-Designer
 
 **Also available — OpenCRISPR-1 gRNA Designer:**

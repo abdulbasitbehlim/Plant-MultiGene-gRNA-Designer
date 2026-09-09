@@ -1,0 +1,9 @@
+Final deployment verification
+Date: 2026-09-09
+Environment: Python 3.13.5
+Command: pytest -q --cov=. --cov-config=.coveragerc --cov-report=term-missing --cov-fail-under=80
+Result: 34 passed
+Branch-aware core coverage: 85.16%
+CI minimum: 80%
+Status: PASS
+Note: Streamlit browser UI still requires final local/live smoke test per UI_TEST_CHECKLIST.md.

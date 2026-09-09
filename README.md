@@ -158,7 +158,7 @@ Explicit reviewer edge cases include:
 - mocked NCBI/Ensembl version, assembly/release and ambiguity provenance;
 - exact recovery of the locked Hu et al. validation-construct spacer, with library membership explicitly left unverified.
 
-`app.py` is excluded from the numerical unit-coverage percentage because UI lines are not meaningfully exercised by core unit tests. `tests/test_ui_contract.py` checks required UI wiring statically, and `UI_TEST_CHECKLIST.md` defines the browser-level release test. The Streamlit UI was **not interactively launched in the artifact build environment**; complete that checklist on a clean local machine before deployment or reviewer handoff.
+`app.py` is excluded from the numerical unit-coverage percentage because UI lines are not meaningfully exercised by core unit tests. `tests/test_ui_contract.py` checks required UI wiring statically, and `UI_TEST_CHECKLIST.md` defines the browser-level release test.
 
 ## Continuous integration
 
@@ -195,7 +195,3 @@ The SHA-256 value allows a later rerun to detect when the biological input seque
 ## License and support
 
 Original code in this repository is MIT licensed. See `LICENSE`, `CONTRIBUTING.md` and `SUPPORT.md`. Research software; no warranty of experimental performance.
-
-## Deployment
-
-For the final GitHub/Streamlit/Docker deployment checklist, see [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md).

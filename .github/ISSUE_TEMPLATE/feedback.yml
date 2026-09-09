@@ -1,0 +1,79 @@
+name: Feedback / Suggestions
+description: Share feedback on the Plant MultiGene gRNA Designer, including usability, scientific workflow, results, or feature suggestions.
+title: "[Feedback]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for trying the Plant MultiGene gRNA Designer. Your feedback helps improve the scientific workflow, usability, documentation, and future features.
+
+  - type: dropdown
+    id: user_type
+    attributes:
+      label: Your background
+      description: Which option best describes you?
+      options:
+        - Researcher / Scientist
+        - Student
+        - Bioinformatician / Computational biologist
+        - Plant biologist / Geneticist
+        - Software developer
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: tested
+    attributes:
+      label: What did you test?
+      description: Briefly describe the genes, organism, input mode, or workflow you tried. Do not include private or sensitive data.
+      placeholder: Example: Arabidopsis gene family using gene lookup and mismatch-aware shared-guide design.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: experience
+    attributes:
+      label: Overall experience
+      options:
+        - Very good
+        - Good
+        - Neutral
+        - Needs improvement
+        - I could not complete the workflow
+    validations:
+      required: true
+
+  - type: textarea
+    id: worked_well
+    attributes:
+      label: What worked well?
+      description: Tell us what you found useful, clear, or scientifically valuable.
+
+  - type: textarea
+    id: improvements
+    attributes:
+      label: What could be improved?
+      description: Report confusing steps, usability problems, missing features, unexpected results, or scientific concerns.
+    validations:
+      required: true
+
+  - type: textarea
+    id: feature_request
+    attributes:
+      label: Feature or analysis suggestions
+      description: What would make this tool more useful for your research?
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional comments
+      description: Any other feedback, references, comparison-tool observations, or notes are welcome.
+
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Scientific-use acknowledgement
+      options:
+        - label: I understand this is a computational research tool and that experimental and genome-wide validation may still be required before biological use.
+          required: true

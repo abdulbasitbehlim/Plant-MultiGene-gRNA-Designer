@@ -1,0 +1,17 @@
+{
+  "title": "Plant MultiGene gRNA Designer",
+  "upload_type": "software",
+  "version": "1.3.1",
+  "creators": [
+    {
+      "name": "Behlim, Abdul Basit"
+    }
+  ],
+  "description": "Release metadata prepared for Zenodo. DOI intentionally absent until a public release is archived.",
+  "license": "MIT",
+  "keywords": [
+    "CRISPR",
+    "gRNA",
+    "research software"
+  ]
+}

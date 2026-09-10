@@ -2,6 +2,7 @@
 branch = True
 omit =
     app.py
+    pages/*
     tests/*
     benchmarks/*
 [report]

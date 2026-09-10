@@ -2,17 +2,13 @@
 
 A Python/Streamlit research tool for asking a specific CRISPR design question: **can one SpCas9 spacer plausibly target every member of a user-defined plant gene set?** The tool searches exact shared targets and mismatch-aware consensus targets, preserves sequence provenance, validates every candidate, and makes its search limits explicit.
 
-## Live app and related projects
+## Live app
 
 **Run the Plant MultiGene app:** https://plant-multigene-grna-designer.onrender.com/
 
 **Give feedback:** https://github.com/abdulbasitbehlim/Plant-MultiGene-gRNA-Designer/issues/new?template=feedback.yml
 
 **GitHub repository:** https://github.com/abdulbasitbehlim/Plant-MultiGene-gRNA-Designer
-
-**Also available — OpenCRISPR-1 gRNA Designer:**
-- Live app: https://opencrispr1-grna-designer.onrender.com/
-- GitHub: https://github.com/abdulbasitbehlim/OpenCRISPR1-gRNA-Designer
 
 > The Render free tier may sleep after inactivity, so the first load can take longer while the service wakes up.
 
@@ -76,6 +72,9 @@ The package intentionally does not invent “both/ours-only/external-only” cou
 
 ### Gene lookup
 Enter two or more gene symbols/IDs and one plant organism. NCBI RefSeq mode tries to retain coding exon pieces from a representative versioned RefSeq RNA. Ensembl REST mode scans individual transcript exons. Sequence retrieval records source/version, genomic assembly/accession or assembly name, annotation release/date when available, UTC retrieval time and a SHA-256 fingerprint of the exact segments used.
+
+### Accession ID
+Enter two or more known NCBI nucleotide/RefSeq accessions or Ensembl stable gene/transcript IDs. The tool retrieves each record directly, preserves accession/version and sequence provenance, and then runs the same shared-guide workflow across the retrieved genes.
 
 ### Manual multi-FASTA
 Provide one FASTA record per gene. This is useful for cultivar-specific sequences or frozen reviewed target sequences. Ambiguous IUPAC bases (`N`, `R`, `Y`, etc.) are normalized to `N`; any spacer window containing ambiguity is skipped rather than silently treated as a mismatch.
@@ -148,7 +147,7 @@ pip install -r requirements-dev.txt
 pytest -q --cov=. --cov-config=.coveragerc --cov-report=term-missing --cov-report=xml
 ```
 
-v1.3.1 artifact result: **34/34 tests passed; 85% branch-aware unit coverage** across `plant_multiguide.py`, `sequence_sources.py` and `validation.py`. Coverage reports are committed as `coverage.txt` and `coverage.xml`.
+The test suite covers the scientific core, sequence retrieval, accession retrieval, provenance, validation and edge cases. Coverage reports are committed as `coverage.txt` and `coverage.xml`.
 
 Explicit reviewer edge cases include:
 

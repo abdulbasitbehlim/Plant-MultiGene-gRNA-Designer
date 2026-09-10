@@ -20,6 +20,7 @@ from plant_multiguide import (
     screen_reference_panel,
 )
 from sequence_sources import fetch_gene, manual_records, parse_multifasta
+from accession_sources import fetch_accession
 from validation import validate_shared_guide, validation_summary_row
 
 APP_VERSION = "1.3.1"
@@ -77,12 +78,12 @@ st.markdown(f"""
 <div class="hero">
   <div class="eyebrow">Gene-family targeting</div>
   <h1>Plant <span style="color:{P['accent']}">MultiGene</span> gRNA Designer</h1>
-  <p>Enter two, three, or more homologous plant genes. The app first searches for an exact 20-nt SpCas9 spacer with an NGG PAM in every gene. When enabled, it can additionally rank mismatch-aware consensus guides that retain a PAM-compatible target in every requested gene.</p>
-  <div class="pills"><span>20 nt + NGG</span><span>Both strands</span><span>Exact shared guides</span><span>Consensus mode</span><span>Guide validation</span><span>CSV / FASTA / JSON</span></div>
+  <p>Enter two, three, or more homologous plant genes by gene lookup, database accession ID, or reviewed multi-FASTA. The app first searches for an exact 20-nt SpCas9 spacer with an NGG PAM in every gene. When enabled, it can additionally rank mismatch-aware consensus guides that retain a PAM-compatible target in every requested gene.</p>
+  <div class="pills"><span>20 nt + NGG</span><span>Both strands</span><span>Accession ID</span><span>Exact shared guides</span><span>Consensus mode</span><span>Guide validation</span><span>CSV / FASTA / JSON</span></div>
 </div>
 """, unsafe_allow_html=True)
 
-input_mode = st.radio("Input mode", ["Gene lookup", "Manual multi-FASTA"], horizontal=True)
+input_mode = st.radio("Input mode", ["Gene lookup", "Accession ID", "Manual multi-FASTA"], horizontal=True)
 records = None
 submitted = False
 
@@ -118,7 +119,51 @@ if input_mode == "Gene lookup":
         progress.empty()
         if errors:
             st.error("One or more genes could not be resolved:\n\n" + "\n".join(f"- {e}" for e in errors))
-            st.info("Use Manual multi-FASTA for genes that are absent or ambiguously annotated in the selected database.")
+            st.info("Use Accession ID or Manual multi-FASTA for genes that are absent or ambiguously annotated in the selected database.")
+            st.stop()
+elif input_mode == "Accession ID":
+    with st.form("accession_form"):
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            accessions_raw = st.text_area(
+                "Gene accession IDs",
+                placeholder="Example:\nNM_...\nXM_...\n\nor Ensembl stable gene/transcript IDs",
+                height=140,
+                help="Enter at least two accession IDs. Separate them with commas, spaces, semicolons, or new lines.",
+            )
+        with c2:
+            source = st.selectbox("Accession source", ["NCBI RefSeq / Nucleotide", "Ensembl REST"])
+        submitted = st.form_submit_button("Fetch accessions and design shared guides", type="primary", use_container_width=True)
+    if submitted:
+        accession_ids: List[str] = [x for x in re.split(r"[\s,;]+", accessions_raw.strip()) if x]
+        accession_ids = list(dict.fromkeys(accession_ids))
+        if len(accession_ids) < 2:
+            st.error("Enter at least two distinct accession IDs.")
+            st.stop()
+        if len(accession_ids) > MAX_GENES:
+            st.error(f"This interactive tool supports at most {MAX_GENES} accession IDs per run.")
+            st.stop()
+        if len(accession_ids) > RECOMMENDED_MAX_GENES:
+            st.warning(f"You entered {len(accession_ids)} accessions. The recommended interactive range is 2–{RECOMMENDED_MAX_GENES} genes.")
+        records = {}
+        errors = []
+        progress = st.progress(0, text="Retrieving accession records...")
+        for i, accession in enumerate(accession_ids, start=1):
+            try:
+                rec = fetch_accession(accession, source)
+                key = rec.gene or accession
+                if key in records:
+                    key = f"{key}|{accession}"
+                records[key] = rec
+            except Exception as exc:
+                errors.append(f"{accession}: {exc}")
+            progress.progress(i / len(accession_ids), text=f"Retrieved {i}/{len(accession_ids)} accession records")
+        progress.empty()
+        if errors:
+            st.error("One or more accessions could not be resolved:\n\n" + "\n".join(f"- {e}" for e in errors))
+            st.stop()
+        if len(records) < 2:
+            st.error("Fewer than two usable gene records were retrieved.")
             st.stop()
 else:
     with st.form("fasta_form"):

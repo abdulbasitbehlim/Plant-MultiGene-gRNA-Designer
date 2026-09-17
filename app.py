@@ -48,6 +48,9 @@ html,body,[data-testid="stAppViewContainer"],.stApp{{background:var(--app)!impor
 .block-container{{max-width:1500px;padding-top:1.2rem;padding-bottom:4rem}}
 .stApp h1,.stApp h2,.stApp h3,.stApp h4,.stApp p,.stApp li,.stApp label{{color:var(--text)!important}}
 [data-testid="stCaptionContainer"] p{{color:var(--muted)!important}}
+[data-baseweb="input"] input,[data-baseweb="textarea"] textarea,.stApp input,.stApp textarea{{color:var(--text)!important;-webkit-text-fill-color:var(--text)!important}}
+[data-baseweb="select"] span,[data-baseweb="select"] div,[data-baseweb="select"] svg{{color:var(--text)!important;fill:var(--text)!important}}
+.stApp input::placeholder,.stApp textarea::placeholder{{color:var(--muted)!important;opacity:.85!important}}
 .hero{{padding:2rem 2.2rem;border:1px solid var(--border);border-radius:22px;background:linear-gradient(130deg,var(--panel),var(--panel2));margin-bottom:1.2rem}}
 .hero .eyebrow{{font-size:.75rem;letter-spacing:.15em;text-transform:uppercase;color:var(--accent)!important;font-weight:800}}
 .hero h1{{font-size:clamp(2rem,4.5vw,4rem);line-height:1;margin:.6rem 0 .8rem;letter-spacing:-.04em}}

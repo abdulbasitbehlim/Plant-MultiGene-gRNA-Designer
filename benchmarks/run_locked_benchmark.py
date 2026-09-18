@@ -58,7 +58,7 @@ row = {
 
 (HERE / "results").mkdir(exist_ok=True)
 with (HERE / "results/locked_benchmark.csv").open("w", newline="") as f:
-    writer = csv.DictWriter(f, fieldnames=row.keys())
+    writer = csv.DictWriter(f, fieldnames=row.keys(), lineterminator="\n")
     writer.writeheader()
     writer.writerow(row)
 (HERE / "results/locked_benchmark.json").write_text(json.dumps(row, indent=2))

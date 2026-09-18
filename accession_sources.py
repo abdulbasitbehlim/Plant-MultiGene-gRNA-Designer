@@ -25,6 +25,7 @@ from sequence_sources import (
     _append_ambiguity_warning,
     _ensembl_release,
     _requests_get,
+    extract_coding_segments,
 )
 
 
@@ -39,50 +40,7 @@ def _gene_label_from_genbank(rec, fallback: str) -> str:
 
 
 def _segments_from_ncbi_record(rec) -> tuple[List[Tuple[str, str]], List[str]]:
-    raw_seq = str(rec.seq)
-    seq = clean_dna(raw_seq)
-    warnings: List[str] = []
-    cds_features = [f for f in rec.features if f.type == "CDS"]
-    exon_features = [f for f in rec.features if f.type == "exon"]
-    segments: List[Tuple[str, str]] = []
-
-    if len(cds_features) > 1:
-        warnings.append(
-            "This accession contains multiple CDS annotations. The first CDS was selected; "
-            "verify that the record represents the intended gene before experimental use."
-        )
-
-    if cds_features:
-        cds = cds_features[0]
-        c0, c1 = int(cds.location.start), int(cds.location.end)
-        for idx, exon in enumerate(exon_features, start=1):
-            e0, e1 = int(exon.location.start), int(exon.location.end)
-            a, b = max(c0, e0), min(c1, e1)
-            if b > a and b - a >= 23:
-                segments.append((f"coding_exon_{idx}:{a+1}-{b}", seq[a:b]))
-        if not segments:
-            piece = seq[c0:c1]
-            if piece:
-                segments = [(f"spliced_CDS:{c0+1}-{c1}", piece)]
-                warnings.append(
-                    "Exon boundaries were unavailable for this accession; scanning uses the "
-                    "spliced CDS, so genomic mapping should be checked for exon-junction guides."
-                )
-    else:
-        if len(seq) > 500_000:
-            raise ValueError(
-                "This accession resolves to a large nucleotide record without a clear CDS. "
-                "Use a gene/transcript-specific accession or reviewed FASTA instead."
-            )
-        segments = [("accession_sequence", seq)]
-        warnings.append(
-            "No CDS feature was found in this accession; the complete accession sequence is "
-            "scanned and the intended coding/genomic context must be reviewed."
-        )
-
-    if not segments or not any(seq_piece for _, seq_piece in segments):
-        raise ValueError("The accession did not contain a usable nucleotide sequence.")
-    return segments, warnings
+    return extract_coding_segments(rec)
 
 
 def fetch_ncbi_accession(accession: str) -> GeneSequenceRecord:
@@ -99,6 +57,8 @@ def fetch_ncbi_accession(accession: str) -> GeneSequenceRecord:
     if not records:
         raise ValueError(f"NCBI could not retrieve a readable nucleotide record for '{requested}'.")
 
+    if len(records) != 1:
+        raise ValueError("Accession resolved to multiple records; use one versioned accession.")
     rec = records[0]
     segments, warnings = _segments_from_ncbi_record(rec)
     raw_seq = str(rec.seq)
@@ -148,7 +108,9 @@ def fetch_ensembl_accession(accession: str) -> GeneSequenceRecord:
     if not requested:
         raise ValueError("Enter an Ensembl stable gene or transcript ID.")
 
-    stable_id = re.sub(r"\.\d+$", "", requested)
+    # Plant transcript suffixes (for example AT4G18197.1) are part of the ID.
+    # Only conventional ENS identifiers have a removable numeric version suffix.
+    stable_id = re.sub(r"\.\d+$", "", requested) if requested.upper().startswith("ENS") else requested
     headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": NCBI_TOOL}
     data = _requests_get(
         f"{ENSEMBL}/lookup/id/{stable_id}", params={"expand": 1}, headers=headers
@@ -184,6 +146,8 @@ def fetch_ensembl_accession(accession: str) -> GeneSequenceRecord:
         "Accession mode scans individual transcript exons to avoid synthetic exon-junction guides; "
         "review coding-region context before experimental use.",
     ]
+    if stable_id != requested:
+        warnings.append("Ensembl serves the current record for this stable ID; the requested historical version is not guaranteed. See source_record_version.")
     amb_codes = tuple(sorted(ambiguity_codes_set))
     _append_ambiguity_warning(warnings, ambiguity_count, amb_codes)
 

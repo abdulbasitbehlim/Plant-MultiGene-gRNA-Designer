@@ -1,0 +1,123 @@
+[
+  {
+    "example": "Exact guide across three input genes",
+    "observed": 3,
+    "expected": 3,
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "One distal mismatch retained",
+    "observed": true,
+    "expected": true,
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Zero seed-mismatch limit enforced",
+    "observed": false,
+    "expected": false,
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Identical spacer without NGG has no site",
+    "observed": 0,
+    "expected": 0,
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Ambiguous spacer excluded",
+    "observed": 0,
+    "expected": 0,
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Reverse-strand site coordinates",
+    "observed": [
+      [
+        4,
+        23
+      ]
+    ],
+    "expected": [
+      [
+        4,
+        23
+      ]
+    ],
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Duplicate FASTA identifier rejected",
+    "observed": true,
+    "expected": true,
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Separate exons do not create junction site",
+    "observed": 0,
+    "expected": 0,
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Short annotated exons stay separate",
+    "observed": [
+      20,
+      3
+    ],
+    "expected": [
+      20,
+      3
+    ],
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Feasible alternative survives invalid closer site",
+    "observed": true,
+    "expected": true,
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Panel total retained despite display cap",
+    "observed": [
+      7,
+      2,
+      true
+    ],
+    "expected": [
+      7,
+      2,
+      true
+    ],
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Empty reference panel rejected",
+    "observed": true,
+    "expected": true,
+    "passed": true,
+    "evidence": "synthetic software check"
+  },
+  {
+    "example": "Two-guide exact fallback covers unrelated synthetic targets",
+    "observed": [
+      2,
+      true
+    ],
+    "expected": [
+      2,
+      true
+    ],
+    "passed": true,
+    "evidence": "synthetic software check"
+  }
+]

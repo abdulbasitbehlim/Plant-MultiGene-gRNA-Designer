@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Iterable, List, Optional, Sequence
 import re
 
-from plant_multiguide import PanelHit, SharedGuide
+from plant_multiguide import PanelHit, SharedGuide, PanelScreen, mismatch_positions, seed_mismatch_count, compatibility_proxy, gc_percent
 
 
 @dataclass(frozen=True)
@@ -49,6 +49,8 @@ def validate_shared_guide(
     max_seed_mismatches_per_gene: int = 1,
     min_compatibility: float = 55.0,
     panel_hits: Optional[Iterable[PanelHit]] = None,
+    expected_gene_ids: Optional[Iterable[str]] = None,
+    input_warnings: Optional[Iterable[str]] = None,
 ) -> ValidationReport:
     """Validate one shared guide using explicit, inspectable rules.
 
@@ -63,7 +65,7 @@ def validate_shared_guide(
         "Spacer length",
         "PASS" if len(spacer) == 20 else "FAIL",
         f"{len(spacer)} nt",
-        "SpCas9/OpenCRISPR-style targeting in this project uses a 20-nt spacer.",
+        "SpCas9 targeting in this project uses a 20-nt spacer.",
     )
     canonical = bool(re.fullmatch(r"[ACGT]{20}", spacer))
     _add(
@@ -83,7 +85,7 @@ def validate_shared_guide(
         "A single multi-gene guide is only valid for this design if every requested gene has a PAM-compatible target site.",
     )
 
-    pam_ok = bool(guide.matches) and all(len(m.pam) == 3 and m.pam.upper()[1:] == "GG" for m in guide.matches)
+    pam_ok = bool(guide.matches) and all(re.fullmatch(r"[ACGTN]GG", m.pam.upper()) for m in guide.matches)
     _add(
         checks,
         "NGG PAM at every target",
@@ -96,10 +98,31 @@ def validate_shared_guide(
     _add(
         checks,
         "One validated target per gene",
-        "PASS" if unique_gene_matches == expected_genes else "FAIL",
+        "PASS" if unique_gene_matches == expected_genes == len(guide.matches) else "FAIL",
         f"{unique_gene_matches} distinct gene match(es)",
         "The validation uses one best PAM-compatible target match for each requested gene.",
     )
+    if expected_gene_ids is not None:
+        identity_ok = {m.gene for m in guide.matches} == set(expected_gene_ids)
+        _add(checks, "Requested gene identities", "PASS" if identity_ok else "FAIL",
+             identity_ok, "Target names must equal the requested set; matching counts alone are insufficient.")
+    evidence_ok = canonical and bool(guide.matches)
+    for m in guide.matches:
+        if not re.fullmatch(r"[ACGT]{20}", m.target_spacer):
+            evidence_ok = False
+            continue
+        if canonical:
+            pos = mismatch_positions(spacer, m.target_spacer)
+            evidence_ok &= (pos == m.mismatch_positions and len(pos) == m.mismatches
+                            and seed_mismatch_count(pos) == m.seed_mismatches
+                            and compatibility_proxy(spacer, m.target_spacer) == m.compatibility_proxy)
+    _add(checks, "Recomputed target evidence", "PASS" if evidence_ok else "FAIL", evidence_ok,
+         "Mismatch fields and compatibility are recomputed from the spacer and target sequences.")
+    provisional = [w for w in (input_warnings or []) if any(term in w.lower() for term in
+                   ("spliced cds", "no cds", "not automatically restricted", "user supplied"))]
+    if provisional:
+        _add(checks, "Input region context", "REVIEW", "Review source annotation",
+             "Confirm genomic continuity and coding context for these inputs before prioritization.")
 
     if guide.design_type == "Exact shared":
         exact_ok = bool(guide.matches) and all(m.mismatches == 0 for m in guide.matches)
@@ -137,7 +160,7 @@ def validate_shared_guide(
             "This is the app's transparent mismatch-ranking proxy, not a calibrated cleavage probability.",
         )
 
-    gc = guide.gc_percent
+    gc = gc_percent(spacer) if canonical else 0.0
     gc_status = "PASS" if 40.0 <= gc <= 60.0 else "REVIEW"
     gc_note = "Within the preferred 40–60% review band." if gc_status == "PASS" else "Outside the preferred 40–60% band; do not reject automatically, but review experimentally."
     _add(checks, "GC content", gc_status, f"{gc:.1f}%", gc_note)
@@ -170,6 +193,11 @@ def validate_shared_guide(
         )
     else:
         hits = list(panel_hits)
+        if isinstance(panel_hits, PanelScreen):
+            _add(checks, "Panel scan scope", "INFO",
+                 f"{panel_hits.total_hits} total; {len(hits)} displayed; radius {panel_hits.mismatch_radius}; "
+                 f"{panel_hits.panel_bp} bp; truncated={panel_hits.truncated}",
+                 f"NGG only, substitutions only. Panel SHA-256: {panel_hits.panel_sha256}")
         if hits:
             specificity_status = "REVIEW"
             closest = min(h.mismatches for h in hits)

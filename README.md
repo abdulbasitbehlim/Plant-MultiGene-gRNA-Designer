@@ -1,6 +1,20 @@
-# Plant MultiGene gRNA Designer v1.3.1
+# Plant MultiGene gRNA Designer v1.4.0
 
 A Python/Streamlit research tool for asking a specific CRISPR design question: **can one SpCas9 spacer plausibly target every member of a user-defined plant gene set?** The tool searches exact shared targets and mismatch-aware consensus targets, preserves sequence provenance, validates every candidate, and makes its search limits explicit.
+
+
+## What changed in version 1.4.0
+
+- Constraint-aware target selection fixes false-negative designs and retains feasible observed alternatives.
+- Duplicate FASTA IDs, ambiguous gene lookup, duplicate resolved records and mixed species are rejected.
+- Group independent exon records using `GeneID|SegmentID`; short exons and compound CDS parts stay separate.
+- Saved run settings prevent stale validation. Panel results follow the exact run, spacer, panel and radius.
+- Empty panels are rejected; total hits, displayed hits, truncation and panel fingerprints are recorded.
+- An exact guide-set fallback proposes several guides when a shared single guide is unavailable.
+- Complete run JSON includes actual sequences and settings; input-segment FASTA can be rerun.
+- Cas-OFFinder 2 input can be exported for a separate genome-wide specificity workflow.
+
+Read [the research audit](docs/RESEARCH_AUDIT.md), [updated user guide](USER_GUIDE.md), and [synthetic examples](examples/README.md). The existing PUP benchmark remains a selected locked context regression, not experimental validation of this software.
 
 ## Live app
 
@@ -23,7 +37,7 @@ Single-gene CRISPR designers are optimized for choosing guides against one locus
 | User-defined multi-gene shared-guide search | Yes | Yes | Yes |
 | Exact shared-guide mode separated from mismatch-aware mode | Yes | Common-target workflow | Optimization-focused |
 | Search semantics documented in code/docs | Seed-exhaustive over observed PAM-compatible spacers; no first-hit stopping | Alignment-oriented | Hierarchical/optimization strategy |
-| Independent exon segments to avoid synthetic junction guides | Yes | Input-dependent | Input-dependent |
+| Exon continuity checks | Independent segments, with provisional warnings when annotation is missing | Individual-exon checks in annotated workflows | Input and annotation dependent |
 | Per-run accession/version + assembly/release + SHA-256 sequence fingerprint | Yes | Not the focus of the original publication | Not the focus of the original publication |
 | Explicit workload ceiling | Yes | Different implementation | Designed for larger analyses |
 | Local validation and custom-guide check | Yes | Tool-specific | Tool-specific |
@@ -35,7 +49,7 @@ This table describes design scope, not a claim that this implementation is globa
 1. **Exact shared guide** — the identical 20-nt spacer occurs next to an NGG PAM in every requested gene.
 2. **Mismatch-aware consensus guide** — a single spacer has a PAM-compatible near-match in every requested gene while satisfying user-selected total-mismatch, PAM-proximal seed-mismatch and compatibility-proxy constraints.
 
-Mismatch-aware search is **seed-exhaustive over every distinct observed PAM-compatible spacer**. It does not stop after the first acceptable seed. Each seed is matched to its nearest target in every gene, a consensus is generated and re-optimized, all surviving unique proposals are ranked, and only then is `max_results` applied. It is **not** exhaustive over all theoretical `4^20` synthetic spacers, so “rank 1” means best among generated proposals rather than a proof of a mathematical global optimum.
+Mismatch-aware search is **seed-exhaustive over every distinct observed PAM-compatible spacer**. It does not stop after the first acceptable seed. For each seed, all constraints are applied before selecting the best feasible target per gene. Feasible observed spacers are retained alongside accepted majority-consensus proposals. All unique proposals are ranked before `max_results` is applied. It is **not** exhaustive over all theoretical `4^20` synthetic spacers, so “rank 1” means best among generated proposals rather than a proof of a mathematical global optimum.
 
 ## Published validation-construct regression
 
@@ -77,7 +91,7 @@ Enter two or more gene symbols/IDs and one plant organism. NCBI RefSeq mode trie
 Enter two or more known NCBI nucleotide/RefSeq accessions or Ensembl stable gene/transcript IDs. The tool retrieves each record directly, preserves accession/version and sequence provenance, and then runs the same shared-guide workflow across the retrieved genes.
 
 ### Manual multi-FASTA
-Provide one FASTA record per gene. This is useful for cultivar-specific sequences or frozen reviewed target sequences. Ambiguous IUPAC bases (`N`, `R`, `Y`, etc.) are normalized to `N`; any spacer window containing ambiguity is skipped rather than silently treated as a mismatch.
+Provide one FASTA record per gene, or enable grouped segments and use `GeneID|SegmentID` for separate exons. Duplicate identifiers and empty records are rejected. This is useful for cultivar-specific sequences or frozen reviewed target sequences. Ambiguous IUPAC bases (`N`, `R`, `Y`, etc.) are normalized to `N`; any spacer window containing ambiguity is skipped rather than silently treated as a mismatch.
 
 ## Runnable example
 
@@ -103,6 +117,7 @@ A PASS means the candidate satisfies rules implemented here. It does **not** mea
 
 - Recommended interactive range: **2–12 genes**.
 - Hard maximum: **20 genes per run**.
+- Input or local panel: **500,000 bases** each.
 - Mismatch-aware guard: **5,000,000 estimated seed-to-site comparisons**.
 
 The guard prevents permissive searches over large gene lists from expanding without bound. For larger genome-scale library work, use a purpose-built pipeline such as CRISPys/Multi-Knock rather than bypassing the limit.
@@ -147,7 +162,7 @@ pip install -r requirements-dev.txt
 pytest -q --cov=. --cov-config=.coveragerc --cov-report=term-missing --cov-report=xml
 ```
 
-The test suite covers the scientific core, sequence retrieval, accession retrieval, provenance, validation and edge cases. Coverage reports are committed as `coverage.txt` and `coverage.xml`.
+The v1.4.0 suite passes 69 tests on Python 3.12.14, with 90.52% configured non-UI coverage. It covers the scientific core, retrieval, provenance, validation, edge cases and three actual Streamlit rerun workflows. Coverage reports are committed as `coverage.txt` and `coverage.xml`.
 
 Explicit reviewer edge cases include:
 
@@ -159,7 +174,7 @@ Explicit reviewer edge cases include:
 - mocked NCBI/Ensembl version, assembly/release and ambiguity provenance;
 - exact recovery of the locked Hu et al. validation-construct spacer, with library membership explicitly left unverified.
 
-`app.py` is excluded from the numerical unit-coverage percentage because UI lines are not meaningfully exercised by core unit tests. `tests/test_ui_contract.py` checks required UI wiring statically, and `UI_TEST_CHECKLIST.md` defines the browser-level release test.
+`app.py` is excluded from the numerical unit-coverage percentage because UI lines are not meaningfully exercised by core unit tests. `tests/test_ui_contract.py` checks required UI wiring statically, `tests/test_app_workflows.py` exercises Streamlit reruns, and `UI_TEST_CHECKLIST.md` defines additional manual visual checks.
 
 ## Continuous integration
 

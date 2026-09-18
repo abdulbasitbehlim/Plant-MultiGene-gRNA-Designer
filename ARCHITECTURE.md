@@ -1,3 +1,9 @@
+# Architecture update for version 1.4.0
+
+The current scientific and workflow behavior is documented in [RESEARCH_AUDIT.md](docs/RESEARCH_AUDIT.md) and [USER_GUIDE.md](USER_GUIDE.md). Version 1.4.0 adds constraint-first site selection, grouped exon inputs, run snapshots in `run_state.py`, structured panel reports and a greedy exact guide-set fallback. `app.py` holds the interface; `plant_multiguide.py` holds the search; `sequence_sources.py` and `accession_sources.py` retrieve and validate sequence context; `validation.py` checks explicit candidate evidence. Package metadata includes all five scientific/workflow modules.
+
+The design rationale below describes the earlier architecture. Where behavior differs, the v1.4.0 audit and source code are authoritative.
+
 # Plant MultiGene gRNA Designer v1.3.1 — architecture and scientific design
 
 ## 1. Scope

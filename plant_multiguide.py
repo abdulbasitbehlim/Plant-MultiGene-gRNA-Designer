@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections import Counter, defaultdict
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
+import hashlib
+import json
 import re
 
 DNA = frozenset("ACGTN")
@@ -21,6 +23,7 @@ IUPAC_AMBIGUOUS = frozenset("NRYWSKMBDHVX")
 MAX_GENES = 20
 RECOMMENDED_MAX_GENES = 12
 MAX_PAIR_COMPARISONS = 5_000_000
+MAX_INPUT_BP = 500_000
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,24 @@ class PanelHit:
     start: int
     mismatches: int
     seed_mismatches: int
+
+
+@dataclass(frozen=True)
+class PanelScreen:
+    hits: Tuple[PanelHit, ...]
+    total_hits: int
+    scanned_sites: int
+    panel_bp: int
+    panel_sha256: str
+    mismatch_radius: int
+    hit_limit: int
+
+    @property
+    def truncated(self) -> bool:
+        return self.total_hits > len(self.hits)
+
+    def __iter__(self):
+        return iter(self.hits)
 
 
 @dataclass(frozen=True)
@@ -191,8 +212,14 @@ def scan_spcas9(sequence: str, gene: str, segment_id: str = "segment") -> List[T
 
 def scan_gene_segments(gene_segments: Mapping[str, Sequence[Tuple[str, str]]]) -> Dict[str, List[TargetSite]]:
     """Scan independent exon/CDS/genomic segments; guides never span segment junctions."""
+    if sum(len(seq) for segments in gene_segments.values() for _, seq in segments) > MAX_INPUT_BP:
+        raise ValueError(f"Input exceeds the {MAX_INPUT_BP:,} base interactive limit. Use reviewed target regions.")
     out: Dict[str, List[TargetSite]] = {}
     for gene, segments in gene_segments.items():
+        if not gene.strip() or not segments:
+            raise ValueError("Each gene needs a nonempty identifier and at least one segment.")
+        if len({name for name, _ in segments}) != len(segments):
+            raise ValueError(f"Duplicate segment identifiers in gene {gene}.")
         gene_sites: List[TargetSite] = []
         for segment_id, seq in segments:
             gene_sites.extend(scan_spcas9(seq, gene, segment_id))
@@ -246,6 +273,34 @@ def _to_match(gene: str, guide: str, site: TargetSite) -> GeneMatch:
     )
 
 
+def _check_thresholds(max_mm: int, max_seed_mm: int, min_compat: float, max_results: int = 1) -> None:
+    if not isinstance(max_mm, int) or not 0 <= max_mm <= 20:
+        raise ValueError("Mismatch limit must be an integer from 0 to 20.")
+    if not isinstance(max_seed_mm, int) or not 0 <= max_seed_mm <= 8:
+        raise ValueError("Seed mismatch limit must be an integer from 0 to 8.")
+    if not 0 <= min_compat <= 100:
+        raise ValueError("Minimum compatibility must be from 0 to 100.")
+    if not isinstance(max_results, int) or max_results < 1:
+        raise ValueError("max_results must be a positive integer.")
+
+
+def _site_key(site: TargetSite) -> tuple:
+    return (-site.sequence_score, site.segment_id, site.start, site.end, site.strand, site.pam)
+
+
+def _select_match(guide: str, gene: str, sites: Sequence[TargetSite], max_mm: int,
+                  max_seed_mm: int, min_compat: float, fallback: bool = False) -> GeneMatch | None:
+    """Choose among feasible sites first; a closer invalid site must not hide one."""
+    choices = [(_to_match(gene, guide, site), site) for site in sites]
+    eligible = [(m, s) for m, s in choices if m.mismatches <= max_mm
+                and m.seed_mismatches <= max_seed_mm and m.compatibility_proxy >= min_compat]
+    pool = eligible or (choices if fallback else [])
+    if not pool:
+        return None
+    return min(pool, key=lambda x: (-x[0].compatibility_proxy, x[0].mismatches,
+                                    x[0].seed_mismatches, _site_key(x[1])))[0]
+
+
 def _build_shared(guide: str, design_type: str, matches: List[GeneMatch], notes: List[str] | None = None) -> SharedGuide:
     comps = [m.compatibility_proxy for m in matches]
     return SharedGuide(
@@ -263,7 +318,7 @@ def _build_shared(guide: str, design_type: str, matches: List[GeneMatch], notes:
 
 
 def exact_shared_guides(sites_by_gene: Mapping[str, Sequence[TargetSite]]) -> List[SharedGuide]:
-    genes = list(sites_by_gene)
+    genes = sorted(sites_by_gene)
     if len(genes) < 2:
         return []
     per_gene: Dict[str, Dict[str, List[TargetSite]]] = {}
@@ -276,10 +331,10 @@ def exact_shared_guides(sites_by_gene: Mapping[str, Sequence[TargetSite]]) -> Li
     for gene in genes[1:]:
         common &= set(per_gene[gene])
     results: List[SharedGuide] = []
-    for spacer in common:
+    for spacer in sorted(common):
         matches = []
         for gene in genes:
-            site = max(per_gene[gene][spacer], key=lambda x: x.sequence_score)
+            site = min(per_gene[gene][spacer], key=_site_key)
             matches.append(_to_match(gene, spacer, site))
         results.append(_build_shared(
             spacer, "Exact shared", matches,
@@ -313,7 +368,7 @@ def estimate_search_diagnostics(
         upper_pair_comparisons=upper,
         strategy=(
             "Seed-exhaustive over every distinct observed PAM-compatible spacer; "
-            "nearest PAM-compatible site selected per gene; majority consensus then "
+            "all constraints applied before selecting each per-gene site; observed feasible spacers retained; majority consensus then "
             "re-optimized against every gene; all surviving unique proposals are ranked "
             "before max_results truncation. This is not exhaustive over all 4^20 synthetic spacers."
         ),
@@ -353,73 +408,49 @@ def mismatch_aware_guides(
 
     Search semantics are explicit: every distinct *observed* PAM-compatible spacer
     is evaluated as a seed (no first-hit/greedy stopping). For each seed, the nearest
-    PAM-compatible target in every gene is selected, a majority consensus is formed,
-    and the consensus is re-optimized against every gene. All surviving unique
-    consensus proposals are globally ranked before ``max_results`` is applied.
+    feasible PAM-compatible target in every gene is selected. The observed spacer
+    is retained, a majority consensus is formed, and the consensus is independently
+    checked against every gene. Unique proposals are ranked before ``max_results``.
 
     This is seed-exhaustive, not mathematically exhaustive over all possible 20-mers;
     therefore the top-ranked result is best among generated proposals, not a proof of
     the global optimum over the 4^20 sequence space.
     """
-    genes = list(sites_by_gene)
+    _check_thresholds(max_mismatches_per_gene, max_seed_mismatches_per_gene, min_compatibility, max_results)
+    genes = sorted(sites_by_gene)
     if len(genes) < 2 or any(not sites_by_gene[g] for g in genes):
         return []
     _enforce_search_limits(sites_by_gene, max_pair_comparisons=max_pair_comparisons)
-
-    seed_spacers = list(dict.fromkeys(s.spacer for g in genes for s in sites_by_gene[g]))
+    seed_spacers = sorted({s.spacer for g in genes for s in sites_by_gene[g]})
     proposals: Dict[str, SharedGuide] = {}
 
+    def matches_for(spacer):
+        matches = [_select_match(spacer, gene, sites_by_gene[gene], max_mismatches_per_gene,
+                                 max_seed_mismatches_per_gene, min_compatibility) for gene in genes]
+        return matches if all(m is not None for m in matches) else []
+
+    def retain(spacer, matches):
+        if matches:
+            proposals[spacer] = _build_shared(spacer, "Mismatch-aware consensus", matches, [
+                "All target sites satisfy the selected mismatch, seed and compatibility constraints.",
+                "Observed feasible spacers and seed-derived consensus proposals are retained; synthetic search is not exhaustive.",
+                "Compatibility is an uncalibrated ranking proxy, not an editing probability.",
+            ])
+
     for seed in seed_spacers:
-        selected: List[TargetSite] = []
-        feasible = True
-        for gene in genes:
-            best = min(
-                sites_by_gene[gene],
-                key=lambda site: (_weighted_distance(seed, site.spacer), -site.sequence_score),
-            )
-            _, mm, seed_mm = _weighted_distance(seed, best.spacer)
-            if mm > max_mismatches_per_gene or seed_mm > max_seed_mismatches_per_gene:
-                feasible = False
-                break
-            selected.append(best)
-        if not feasible:
+        matches = matches_for(seed)
+        if not matches:
             continue
-
-        guide = _consensus([site.spacer for site in selected], preferred=seed)
-        matches: List[GeneMatch] = []
-        for gene in genes:
-            best = min(
-                sites_by_gene[gene],
-                key=lambda site: (_weighted_distance(guide, site.spacer), -site.sequence_score),
-            )
-            match = _to_match(gene, guide, best)
-            if (
-                match.mismatches > max_mismatches_per_gene
-                or match.seed_mismatches > max_seed_mismatches_per_gene
-                or match.compatibility_proxy < min_compatibility
-            ):
-                feasible = False
-                break
-            matches.append(match)
-        if not feasible:
-            continue
-
-        notes = [
-            "Consensus guide has a PAM-compatible target in every requested gene.",
-            "Search is exhaustive across observed PAM-compatible seed spacers, with no early stop; it is not exhaustive over all possible synthetic 20-mers.",
-            "Mismatch compatibility is a transparent prioritization proxy, not a calibrated cleavage probability.",
-        ]
-        obj = _build_shared(guide, "Mismatch-aware consensus", matches, notes)
-        previous = proposals.get(guide)
-        if previous is None or _rank_key(obj) > _rank_key(previous):
-            proposals[guide] = obj
-
+        retain(seed, matches)
+        consensus = _consensus([m.target_spacer for m in matches], preferred=seed)
+        if consensus != seed and consensus not in proposals:
+            retain(consensus, matches_for(consensus))
     exact_spacers = {g.spacer for g in exact_shared_guides(sites_by_gene)}
     results = [g for spacer, g in proposals.items() if spacer not in exact_spacers]
     results.sort(key=_rank_key, reverse=True)
     return results[:max_results]
 
-def _rank_key(g: SharedGuide) -> Tuple[float, ...]:
+def _rank_key(g: SharedGuide) -> tuple:
     gc_pref = -abs(g.gc_percent - 50.0)
     return (
         float(g.genes_covered),
@@ -429,6 +460,7 @@ def _rank_key(g: SharedGuide) -> Tuple[float, ...]:
         -float(g.worst_mismatch_count),
         g.sequence_score,
         gc_pref,
+        g.spacer,  # deterministic final tie break
     )
 
 
@@ -441,6 +473,7 @@ def design_shared_guides(
     max_results: int = 100,
     max_pair_comparisons: int = MAX_PAIR_COMPARISONS,
 ) -> Tuple[Dict[str, List[TargetSite]], List[SharedGuide]]:
+    _check_thresholds(max_mismatches_per_gene, max_seed_mismatches_per_gene, min_compatibility, max_results)
     if len(gene_segments) < 2:
         raise ValueError("Enter at least two genes/sequences for a shared-guide design.")
     if len(gene_segments) > MAX_GENES:
@@ -466,30 +499,31 @@ def design_shared_guides(
 def evaluate_candidate_guide(
     guide: str,
     sites_by_gene: Mapping[str, Sequence[TargetSite]],
+    max_mismatches_per_gene: int = 2,
+    max_seed_mismatches_per_gene: int = 1,
+    min_compatibility: float = 55.0,
 ) -> SharedGuide:
     """Evaluate an arbitrary 20-nt spacer against the currently scanned genes.
 
-    The closest PAM-compatible site in each gene is retained even when it exceeds
-    design thresholds; the validation layer can then explain exactly why the
-    candidate passes, needs review, or fails.
+    The best proxy-scored site satisfying all thresholds is retained per gene.
+    If none is feasible, the best proxy-scored site is retained for diagnosis;
+    validation explains the threshold failures.
     """
+    _check_thresholds(max_mismatches_per_gene, max_seed_mismatches_per_gene, min_compatibility)
     spacer = clean_dna(guide)
     if len(spacer) != 20 or "N" in spacer:
         raise ValueError("Candidate guide must be exactly 20 resolved DNA bases (A/C/G/T).")
     matches: List[GeneMatch] = []
     missing = []
-    for gene, sites in sites_by_gene.items():
+    for gene, sites in sorted(sites_by_gene.items()):
         if not sites:
             missing.append(gene)
             continue
-        best = min(
-            sites,
-            key=lambda site: (_weighted_distance(spacer, site.spacer), -site.sequence_score),
-        )
-        matches.append(_to_match(gene, spacer, best))
+        matches.append(_select_match(spacer, gene, sites, max_mismatches_per_gene,
+                                     max_seed_mismatches_per_gene, min_compatibility, fallback=True))
     exact = bool(matches) and not missing and all(m.mismatches == 0 for m in matches)
     notes = [
-        "Custom validation candidate: closest PAM-compatible target retained for each gene.",
+        "Custom validation candidate: best feasible PAM-compatible target retained per gene; if none is feasible, the best proxy match is shown for diagnosis.",
         "This evaluation does not create a new PAM site; it compares the supplied spacer with PAM-compatible sites already found in each gene.",
     ]
     if missing:
@@ -534,22 +568,60 @@ def match_rows(g: SharedGuide) -> List[Dict[str, object]]:
     return rows
 
 
-def screen_reference_panel(
-    guide: str,
-    panel: Mapping[str, str],
-    max_mismatches: int = 3,
-    max_hits: int = 250,
-) -> List[PanelHit]:
-    """PAM-aware near-match screen for a supplied FASTA panel (not a whole-genome claim)."""
+def screen_reference_panel_report(
+    guide: str, panel: Mapping[str, str], max_mismatches: int = 3, max_hits: int = 250,
+) -> PanelScreen:
+    """Complete bounded local scan; capped display never hides total hit count."""
+    _check_thresholds(max_mismatches, 8, 0, max_hits)
+    guide = clean_dna(guide)
+    if len(guide) != 20 or "N" in guide:
+        raise ValueError("Panel guide must be 20 resolved DNA bases.")
+    if not panel or any(not name.strip() or not clean_dna(seq) for name, seq in panel.items()):
+        raise ValueError("Provide a nonempty reference panel with nonempty named sequences.")
+    normalized = {name: clean_dna(seq) for name, seq in sorted(panel.items())}
+    panel_bp = sum(map(len, normalized.values()))
+    if panel_bp > MAX_INPUT_BP:
+        raise ValueError(f"Panel exceeds {MAX_INPUT_BP:,} bases; use an external genome-wide workflow.")
+    digest = hashlib.sha256(json.dumps(normalized, sort_keys=True).encode()).hexdigest()
     hits: List[PanelHit] = []
-    for contig, seq in panel.items():
-        for site in scan_spcas9(seq, gene=contig, segment_id=contig):
+    scanned_sites = 0
+    for contig, seq in normalized.items():
+        sites = scan_spcas9(seq, gene=contig, segment_id=contig)
+        scanned_sites += len(sites)
+        for site in sites:
             pos = mismatch_positions(guide, site.spacer)
             if len(pos) <= max_mismatches:
-                hits.append(PanelHit(
-                    contig=contig, spacer=site.spacer, pam=site.pam,
-                    strand=site.strand, start=site.start,
-                    mismatches=len(pos), seed_mismatches=seed_mismatch_count(pos),
-                ))
-    hits.sort(key=lambda h: (h.mismatches, h.seed_mismatches, h.contig, h.start))
-    return hits[:max_hits]
+                hits.append(PanelHit(contig, site.spacer, site.pam, site.strand, site.start,
+                                     len(pos), seed_mismatch_count(pos)))
+    hits.sort(key=lambda h: (h.mismatches, h.seed_mismatches, h.contig, h.start, h.strand))
+    return PanelScreen(tuple(hits[:max_hits]), len(hits), scanned_sites, panel_bp,
+                       digest, max_mismatches, max_hits)
+
+
+def screen_reference_panel(guide: str, panel: Mapping[str, str], max_mismatches: int = 3,
+                           max_hits: int = 250) -> List[PanelHit]:
+    """Compatibility API; use the report API for total counts and provenance."""
+    return list(screen_reference_panel_report(guide, panel, max_mismatches, max_hits).hits)
+
+
+def suggest_exact_guide_set(sites_by_gene: Mapping[str, Sequence[TargetSite]], max_guides: int = 5) -> dict:
+    """Deterministic greedy exact set cover; not a minimum-size or efficacy guarantee."""
+    _check_thresholds(0, 0, 0, max_guides)
+    by_spacer = defaultdict(dict)
+    for gene, sites in sorted(sites_by_gene.items()):
+        for site in sorted(sites, key=_site_key):
+            by_spacer[site.spacer].setdefault(gene, site)
+    uncovered = set(sites_by_gene)
+    chosen = []
+    while uncovered and by_spacer and len(chosen) < max_guides:
+        spacer = min(by_spacer, key=lambda s: (-len(set(by_spacer[s]) & uncovered),
+                                              -sequence_quality_score(s), s))
+        covered = set(by_spacer[spacer])
+        if not covered & uncovered:
+            break
+        matches = [_to_match(g, spacer, site) for g, site in sorted(by_spacer.pop(spacer).items())]
+        chosen.append(_build_shared(spacer, "Exact guide set member", matches,
+                                   ["Exact subset coverage in a greedy multi-guide fallback; not a single all-gene guide."]))
+        uncovered -= covered
+    return {"guides": chosen, "uncovered_genes": sorted(uncovered),
+            "complete": not uncovered, "method": "greedy exact set cover; minimum size not guaranteed"}

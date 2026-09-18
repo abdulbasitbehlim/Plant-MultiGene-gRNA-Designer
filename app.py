@@ -17,13 +17,20 @@ from plant_multiguide import (
     evaluate_candidate_guide,
     guide_summary_row,
     match_rows,
-    screen_reference_panel,
+    screen_reference_panel_report,
+    suggest_exact_guide_set,
 )
-from sequence_sources import fetch_gene, manual_records, parse_multifasta
+from sequence_sources import fetch_gene, manual_records, parse_multifasta, validate_record_set
 from accession_sources import fetch_accession
 from validation import validate_shared_guide, validation_summary_row
 
-APP_VERSION = "1.3.1"
+from run_state import (APP_VERSION, create_run_snapshot, panel_result_key, export_input_fasta, export_run, cas_offinder_input)
+
+
+def clear_design_state():
+    for key in list(st.session_state):
+        if key.startswith("plant_") and key not in {"plant_custom_spacer"}:
+            del st.session_state[key]
 
 st.set_page_config(
     page_title="Plant MultiGene CRISPR Designer",
@@ -100,6 +107,7 @@ if input_mode == "Gene lookup":
             source = st.selectbox("Sequence source", ["NCBI RefSeq", "Ensembl REST"])
         submitted = st.form_submit_button("Design shared guides", type="primary", use_container_width=True)
     if submitted:
+        clear_design_state()
         genes: List[str] = [g for g in re.split(r"[\s,;]+", genes_raw.strip()) if g]
         genes = list(dict.fromkeys(genes))
         if len(genes) < 2:
@@ -138,6 +146,7 @@ elif input_mode == "Accession ID":
             source = st.selectbox("Accession source", ["NCBI RefSeq / Nucleotide", "Ensembl REST"])
         submitted = st.form_submit_button("Fetch accessions and design shared guides", type="primary", use_container_width=True)
     if submitted:
+        clear_design_state()
         accession_ids: List[str] = [x for x in re.split(r"[\s,;]+", accessions_raw.strip()) if x]
         accession_ids = list(dict.fromkeys(accession_ids))
         if len(accession_ids) < 2:
@@ -171,6 +180,7 @@ elif input_mode == "Accession ID":
 else:
     with st.form("fasta_form"):
         organism = st.text_input("Plant organism / cultivar label", value="Plant species")
+        group_segments = st.checkbox("Group separate exons using GeneID|SegmentID headers", value=False)
         raw_fasta = st.text_area(
             "One FASTA record per gene",
             height=260,
@@ -179,8 +189,9 @@ else:
         )
         submitted = st.form_submit_button("Design shared guides", type="primary", use_container_width=True)
     if submitted:
+        clear_design_state()
         try:
-            records = manual_records(raw_fasta, organism=organism)
+            records = manual_records(raw_fasta, organism=organism, group_segments=group_segments)
         except Exception as exc:
             st.error(str(exc))
             st.stop()
@@ -193,9 +204,14 @@ else:
         if len(records) > RECOMMENDED_MAX_GENES:
             st.warning(f"{len(records)} genes exceeds the recommended interactive range of {RECOMMENDED_MAX_GENES}; permissive mismatch-aware searches may hit the workload guard.")
 
+current_settings = {"include_mismatch_aware": include_mismatch, "max_mismatches_per_gene": max_mm,
+                    "max_seed_mismatches_per_gene": max_seed_mm, "min_compatibility": min_compat,
+                    "max_results": max_results}
+
 if submitted and records:
     gene_segments = {gene: rec.segments for gene, rec in records.items()}
     try:
+        validate_record_set(records)
         sites_by_gene, guides = design_shared_guides(
             gene_segments,
             include_mismatch_aware=include_mismatch,
@@ -208,6 +224,7 @@ if submitted and records:
         st.error(f"Design failed: {exc}")
         st.stop()
     diagnostics = estimate_search_diagnostics(sites_by_gene)
+    st.session_state["plant_snapshot"] = create_run_snapshot(records, current_settings)
     st.session_state["plant_records"] = records
     st.session_state["plant_sites"] = sites_by_gene
     st.session_state["plant_guides"] = guides
@@ -217,190 +234,141 @@ if "plant_guides" in st.session_state:
     records = st.session_state["plant_records"]
     sites_by_gene = st.session_state["plant_sites"]
     guides = st.session_state["plant_guides"]
-    diagnostics = st.session_state.get("plant_search_diagnostics", estimate_search_diagnostics(sites_by_gene))
+    snapshot = st.session_state["plant_snapshot"]
+    settings = snapshot["settings"]
+    diagnostics = st.session_state["plant_search_diagnostics"]
+    if settings != current_settings:
+        st.warning("Settings have changed. Displayed results and exports still use the saved run settings below. Submit Design shared guides again to apply the new settings.")
+    st.caption(f"Saved run {snapshot['run_id'][:12]} · {snapshot['created_at_utc']}")
+    st.json(settings, expanded=False)
+    validation_kwargs = dict(expected_genes=len(records), expected_gene_ids=list(records),
+        max_mismatches_per_gene=settings["max_mismatches_per_gene"],
+        max_seed_mismatches_per_gene=settings["max_seed_mismatches_per_gene"],
+        min_compatibility=settings["min_compatibility"],
+        input_warnings=[w for rec in records.values() for w in rec.warnings])
 
     st.subheader("Design summary")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Genes", len(records))
-    m2.metric("PAM-compatible sites", sum(len(v) for v in sites_by_gene.values()))
-    m3.metric("Shared-guide designs", len(guides))
-    m4.metric("Exact shared", sum(g.design_type == "Exact shared" for g in guides))
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Genes", len(records))
+    c2.metric("PAM-compatible sites", sum(map(len, sites_by_gene.values())))
+    c3.metric("Returned shared guides", len(guides))
+    c4.metric("Exact shared", sum(g.design_type == "Exact shared" for g in guides))
+    st.caption("Returned guides may be limited by Maximum returned guides. Coordinates are 1-based within each input segment, not chromosome coordinates.")
 
     with st.expander("Sequence provenance, reproducibility and warnings"):
         for gene, rec in records.items():
-            st.markdown(f"**{gene}** — {rec.source} · `{rec.accession}` · {rec.total_bp:,} bp across {len(rec.segments)} scanned segment(s)")
-            st.caption(rec.description)
-            st.code(
-                f"record/version: {rec.source_record_version}\n"
-                f"assembly/genomic record: {rec.assembly}\n"
-                f"annotation release: {rec.annotation_release}\n"
-                f"retrieved UTC: {rec.retrieved_at_utc}\n"
-                f"sequence SHA-256: {rec.sequence_sha256}\n"
-                f"ambiguous bases: {rec.ambiguity_count} ({', '.join(rec.ambiguity_codes) or 'none'})",
-                language=None,
-            )
+            st.markdown(f"**{gene}** — {rec.source} · `{rec.accession}` · {rec.total_bp:,} bp in {len(rec.segments)} segments")
+            st.caption(f"sequence SHA-256: {rec.sequence_sha256}")
+            st.json(rec.provenance_dict(), expanded=False)
             for warning in rec.warnings:
                 st.warning(warning)
-
-    if include_mismatch:
+    if settings["include_mismatch_aware"]:
         with st.expander("Mismatch-aware search strategy and computational workload"):
-            st.markdown(f"**Strategy:** {diagnostics.strategy}")
-            st.markdown(
-                f"**This run:** {diagnostics.genes} genes · {diagnostics.total_pam_sites:,} PAM-compatible sites · "
-                f"{diagnostics.unique_seed_spacers:,} distinct observed seeds · up to "
-                f"{diagnostics.upper_pair_comparisons:,} pair comparisons in the two nearest-neighbour passes."
-            )
-            st.caption(f"Recommended interactive range: 2–{RECOMMENDED_MAX_GENES} genes. Hard limits: {MAX_GENES} genes and {MAX_PAIR_COMPARISONS:,} estimated pair comparisons.")
+            st.write(diagnostics.strategy)
+            st.write(f"Upper bound: {diagnostics.upper_pair_comparisons:,} candidate-to-site comparisons.")
 
+    with st.expander("Exact guide set fallback", expanded=not bool(guides)):
+        st.caption("A separate option using several guides. This greedy exact-match set cover is not guaranteed to use the fewest guides and does not predict editing success.")
+        fallback_limit = st.slider("Maximum guides in fallback set", 1, 20, 5)
+        fallback = suggest_exact_guide_set(sites_by_gene, fallback_limit)
+        rows = [{**guide_summary_row(g), "Target genes": ", ".join(m.gene for m in g.matches)} for g in fallback["guides"]]
+        if rows:
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            st.download_button("Download fallback CSV", pd.DataFrame(rows).to_csv(index=False), "plant_exact_guide_set.csv", "text/csv")
+        if fallback["uncovered_genes"]:
+            st.warning("Uncovered genes: " + ", ".join(fallback["uncovered_genes"]))
+        else:
+            st.info("Every input gene has an exact match in this guide set. Specificity and sequence-quality review are still required for each member.")
+
+    # Panel evidence is scoped to the current run, spacer, FASTA text and radius.
+    panel_reports = {}
+    selected = None
     if not guides:
-        st.warning("No single guide satisfied the current all-gene constraints. This is a scientifically valid result: the genes may not share a suitable PAM-compatible target under these settings.")
-        st.markdown("Try reviewed genomic/exonic FASTA sequences, verify that the genes are homologous, or relax mismatch-aware thresholds carefully. For unrelated genes, use multiple sgRNAs rather than forcing one shared guide.")
-        st.stop()
-
-    validation_reports = [
-        validate_shared_guide(
-            g, expected_genes=len(records),
-            max_mismatches_per_gene=max_mm,
-            max_seed_mismatches_per_gene=max_seed_mm,
-            min_compatibility=min_compat,
-        )
-        for g in guides
-    ]
-    summary_df = pd.DataFrame([
-        {**guide_summary_row(g), **validation_summary_row(r)}
-        for g, r in zip(guides, validation_reports)
-    ])
-    st.markdown("#### Ranked guides with validation")
-    st.dataframe(summary_df, use_container_width=True, hide_index=True)
-
-    c1, c2 = st.columns(2)
-    with c1:
-        fig = px.scatter(summary_df, x="GC%", y="Minimum compatibility", size="Sequence quality", hover_name="Spacer (20 nt)", symbol="Design type", title="Guide quality landscape")
-        fig.update_layout(template=P["plot"], height=390, margin=dict(l=20, r=20, t=50, b=20))
-        st.plotly_chart(fig, use_container_width=True)
-    with c2:
-        top = summary_df.head(20).copy()
-        fig2 = px.bar(top, x="Spacer (20 nt)", y="Average compatibility", pattern_shape="Design type", title="Top shared-guide compatibility")
-        fig2.update_layout(template=P["plot"], height=390, margin=dict(l=20, r=20, t=50, b=20), xaxis_tickangle=-45)
-        st.plotly_chart(fig2, use_container_width=True)
-
-    labels = [f"{i+1}. {g.spacer} · {g.design_type} · min {g.minimum_compatibility:.0f}" for i, g in enumerate(guides)]
-    selected_label = st.selectbox("Inspect one guide", labels)
-    selected = guides[labels.index(selected_label)]
-
-    st.markdown(f"### `{selected.spacer}`")
-    d1, d2, d3, d4 = st.columns(4)
-    d1.metric("Design type", selected.design_type)
-    d2.metric("Genes covered", selected.genes_covered)
-    d3.metric("Worst mismatches", selected.worst_mismatch_count)
-    d4.metric("GC", f"{selected.gc_percent:.1f}%")
-
-    panel_state_key = f"plant_panel_hits::{selected.spacer}"
-    selected_panel_hits = st.session_state.get(panel_state_key)
-    selected_validation = validate_shared_guide(
-        selected, expected_genes=len(records),
-        max_mismatches_per_gene=max_mm,
-        max_seed_mismatches_per_gene=max_seed_mm,
-        min_compatibility=min_compat,
-        panel_hits=selected_panel_hits,
-    )
-    st.markdown("#### Validation")
-    v1, v2, v3, v4 = st.columns(4)
-    v1.metric("Overall", selected_validation.status)
-    v2.metric("PASS checks", selected_validation.pass_count)
-    v3.metric("REVIEW checks", selected_validation.review_count)
-    v4.metric("FAIL checks", selected_validation.fail_count)
-    validation_df = pd.DataFrame([c.__dict__ for c in selected_validation.checks])
-    st.dataframe(validation_df, use_container_width=True, hide_index=True)
-    if selected_validation.status == "PASS":
-        st.success("Core guide validation passed. Specificity status: " + selected_validation.specificity_status)
-    elif selected_validation.status == "REVIEW":
-        st.warning("Guide passes hard design requirements but has one or more review flags. Specificity status: " + selected_validation.specificity_status)
+        st.warning("No single guide satisfied the current all-gene constraints among the candidates searched. The synthetic spacer search is not exhaustive.")
     else:
-        st.error("Guide failed one or more hard validation requirements. Review the failed checks before prioritizing it.")
-
-    st.markdown("#### Per-gene target evidence")
-    st.dataframe(pd.DataFrame(match_rows(selected)), use_container_width=True, hide_index=True)
-    for note in selected.notes:
-        st.caption(note)
-
-    with st.expander("Optional reference-panel near-match screen"):
-        st.caption("This scans only the FASTA you provide. It is useful for a paralog/off-target panel, but it is not a whole-genome specificity analysis.")
-        panel_raw = st.text_area("Reference panel FASTA", key="panel_fasta", height=160)
-        panel_mm = st.slider("Panel mismatch radius", 0, 4, 3, key="panel_mm")
-        if st.button("Screen selected guide", key="screen_panel"):
-            try:
-                panel = parse_multifasta(panel_raw)
-                hits = screen_reference_panel(selected.spacer, panel, panel_mm)
-                st.session_state[panel_state_key] = hits
-                hit_df = pd.DataFrame([h.__dict__ for h in hits])
-                if hit_df.empty:
-                    st.success("No PAM-compatible hits were found within the selected mismatch radius in this supplied panel. Validation will record PASS for this supplied panel.")
+        labels = [f"{i+1}. {g.spacer} · {g.design_type}" for i, g in enumerate(guides)]
+        selected_label = st.selectbox("Inspect one guide", labels)
+        selected = guides[labels.index(selected_label)]
+        with st.expander("Optional reference-panel near-match screen"):
+            st.caption("NGG sites and substitutions only; up to 500,000 input bases. Intended targets are also listed and must be classified by their individual loci. This is not a whole-genome clearance.")
+            panel_raw = st.text_area("Reference panel FASTA", key="panel_fasta", height=160)
+            panel_mm = st.slider("Panel mismatch radius", 0, 4, 3, key="panel_mm")
+            key = panel_result_key(snapshot["run_id"], selected.spacer, panel_raw, panel_mm)
+            if st.button("Screen selected guide", key="screen_panel"):
+                try:
+                    report = screen_reference_panel_report(selected.spacer, parse_multifasta(panel_raw), panel_mm)
+                    st.session_state[key] = report
+                except Exception as exc:
+                    st.error(str(exc))
+            for candidate in guides:
+                candidate_key = panel_result_key(snapshot["run_id"], candidate.spacer, panel_raw, panel_mm)
+                if candidate_key in st.session_state:
+                    panel_reports[candidate.spacer] = st.session_state[candidate_key]
+            report = panel_reports.get(selected.spacer)
+            if report is not None:
+                st.write(f"{report.total_hits} total hits; {len(report.hits)} displayed; {report.scanned_sites} NGG sites examined.")
+                if report.truncated:
+                    st.warning("The displayed hit list is truncated. Total hit count includes every hit in this bounded scan.")
+                if report.hits:
+                    st.dataframe(pd.DataFrame([h.__dict__ for h in report.hits]), hide_index=True, use_container_width=True)
+                    st.download_button("Download displayed panel hits", pd.DataFrame([h.__dict__ for h in report.hits]).to_csv(index=False), "plant_panel_hits.csv", "text/csv")
                 else:
-                    st.warning("Near matches were found. Validation marks the panel as REVIEW because intended multi-gene targets must be distinguished from unwanted sites.")
-                    st.dataframe(hit_df, use_container_width=True, hide_index=True)
-            except Exception as exc:
-                st.error(str(exc))
+                    st.info("No matches found within this panel and radius. Whole-genome specificity has not been established.")
+            else:
+                st.caption("No saved screen matches this run, guide, panel text and radius.")
+
+    reports = [validate_shared_guide(g, panel_hits=panel_reports.get(g.spacer), **validation_kwargs) for g in guides]
+    summary_df = pd.DataFrame([{**guide_summary_row(g), **validation_summary_row(r)} for g, r in zip(guides, reports)])
+    if guides:
+        st.markdown("#### Ranked guides with validation")
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+        st.caption("Sequence quality and compatibility are uncalibrated ranking aids. PASS means software rules passed, not that editing was experimentally demonstrated.")
+        selected_report = reports[guides.index(selected)]
+        st.markdown("#### Validation")
+        st.write(f"{selected_report.status} · Specificity: {selected_report.specificity_status}")
+        st.dataframe(pd.DataFrame([c.__dict__ for c in selected_report.checks]), hide_index=True, use_container_width=True)
+        st.markdown("#### Per-gene target evidence")
+        st.dataframe(pd.DataFrame(match_rows(selected)), hide_index=True, use_container_width=True)
+        fig = px.scatter(summary_df, x="GC%", y="Minimum compatibility", hover_name="Spacer (20 nt)", color="Design type")
+        fig.update_layout(template=P["plot"], height=320)
+        st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("Validate a custom 20-nt guide against these genes"):
-        st.caption("This reuses the already scanned PAM-compatible sites for the loaded genes and reports the closest target in every gene. It is useful for checking a guide proposed by another tool or paper.")
+        st.caption("Selects a site satisfying the saved run limits when one exists. Otherwise shows the best proxy match to explain failure. Available even when the search returns no guides.")
         custom_spacer = st.text_input("Custom spacer (20 nt, no PAM)", key="plant_custom_spacer", max_chars=20).strip().upper()
         if st.button("Validate custom guide", key="plant_custom_validate"):
             try:
-                custom_guide = evaluate_candidate_guide(custom_spacer, sites_by_gene)
-                custom_report = validate_shared_guide(
-                    custom_guide, expected_genes=len(records),
-                    max_mismatches_per_gene=max_mm,
-                    max_seed_mismatches_per_gene=max_seed_mm,
-                    min_compatibility=min_compat,
-                )
+                custom = evaluate_candidate_guide(custom_spacer, sites_by_gene,
+                    settings["max_mismatches_per_gene"], settings["max_seed_mismatches_per_gene"], settings["min_compatibility"])
+                custom_report = validate_shared_guide(custom, **validation_kwargs)
                 st.metric("Custom guide validation", custom_report.status)
-                st.dataframe(pd.DataFrame([c.__dict__ for c in custom_report.checks]), use_container_width=True, hide_index=True)
-                st.markdown("**Closest PAM-compatible target in each gene**")
-                st.dataframe(pd.DataFrame(match_rows(custom_guide)), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame([c.__dict__ for c in custom_report.checks]), hide_index=True)
+                st.dataframe(pd.DataFrame(match_rows(custom)), hide_index=True)
             except Exception as exc:
                 st.error(str(exc))
 
     st.subheader("Exports")
-    export_validation_reports = [
-        validate_shared_guide(
-            candidate, expected_genes=len(records),
-            max_mismatches_per_gene=max_mm,
-            max_seed_mismatches_per_gene=max_seed_mm,
-            min_compatibility=min_compat,
-            panel_hits=st.session_state.get(f"plant_panel_hits::{candidate.spacer}"),
-        )
-        for candidate in guides
-    ]
-    export_summary_df = pd.DataFrame([
-        {**guide_summary_row(candidate), **validation_summary_row(report)}
-        for candidate, report in zip(guides, export_validation_reports)
-    ])
-    export_summary_df["Input source records"] = "; ".join(f"{g}:{r.source_record_version}" for g, r in records.items())
-    export_summary_df["Input assemblies/genomic records"] = "; ".join(f"{g}:{r.assembly}" for g, r in records.items())
-    export_summary_df["Input annotation releases"] = "; ".join(f"{g}:{r.annotation_release}" for g, r in records.items())
-    export_summary_df["Input sequence SHA-256"] = "; ".join(f"{g}:{r.sequence_sha256}" for g, r in records.items())
-    export_summary_df["Search strategy"] = diagnostics.strategy
-    export_summary_df["Search upper pair comparisons"] = diagnostics.upper_pair_comparisons
-    export_csv = export_summary_df.to_csv(index=False).encode("utf-8")
-    export_fasta = "\n".join(
-        f">shared_guide_{i+1}|{g.design_type.replace(' ', '_')}|genes={g.genes_covered}|min_compat={g.minimum_compatibility}\n{g.spacer}"
-        for i, g in enumerate(guides)
-    ).encode("utf-8")
-    export_json = json.dumps({
-        "app": "Plant MultiGene gRNA Designer",
-        "version": APP_VERSION,
-        "search": diagnostics.__dict__,
-        "genes": {gene: rec.provenance_dict() for gene, rec in records.items()},
-        "guides": [
-            {**guide_summary_row(g), **validation_summary_row(r), "validation_checks": [c.__dict__ for c in r.checks], "matches": match_rows(g), "notes": g.notes}
-            for g, r in zip(guides, export_validation_reports)
-        ],
-    }, indent=2).encode("utf-8")
-    b1, b2, b3 = st.columns(3)
-    b1.download_button("Download CSV", export_csv, "plant_shared_guides.csv", "text/csv", use_container_width=True)
-    b2.download_button("Download FASTA", export_fasta, "plant_shared_guides.fasta", "text/plain", use_container_width=True)
-    b3.download_button("Download JSON", export_json, "plant_shared_guides.json", "application/json", use_container_width=True)
+    if guides:
+        st.download_button("Download CSV", summary_df.to_csv(index=False), "plant_shared_guides.csv", "text/csv")
+        guide_fasta = "\n".join(f">shared_guide_{i+1}\n{g.spacer}" for i, g in enumerate(guides)) + "\n"
+        st.download_button("Download guide FASTA", guide_fasta, "plant_shared_guides.fasta", "text/plain")
+    payload = export_run(snapshot, guides, reports, panel_reports, fallback)
+    payload["search"] = diagnostics.__dict__
+    st.download_button("Download complete run JSON", json.dumps(payload, indent=2), "plant_design_run.json", "application/json")
+    st.download_button("Download input segments FASTA", export_input_fasta(records), "plant_input_segments.fasta", "text/plain")
+    st.caption("The JSON includes the actual input segments, saved settings, per-gene evidence, validation and available panel results. To rerun the exported input FASTA, enable grouped GeneID|SegmentID mode.")
 
-    st.markdown("---")
-    st.markdown("**Scientific boundary:** this software prioritizes candidates. Mismatch-aware ranking is best among the generated seed-derived proposals, not a proof of a global optimum over all possible 20-mers. Confirm the exact assembly/genotype, intended coding region, allele/cultivar variation, and genome-wide off-targets before experimental use.")
+    with st.expander("Prepare an external genome specificity search"):
+        st.caption("Exports Cas-OFFinder 2 input without running it. Use your exact plant assembly and inspect intended versus unwanted loci. Bulges and cultivar variation require additional analysis.")
+        genome_path = st.text_input("Local genome FASTA file or directory", value="/path/to/plant_genome_fasta")
+        external_mm = st.slider("External mismatch radius", 0, 6, 3)
+        include_nag = st.checkbox("Include NAG alongside NGG for specificity review", value=True)
+        external_guides = guides or fallback["guides"]
+        if external_guides:
+            try:
+                external_text = cas_offinder_input([g.spacer for g in external_guides], genome_path, external_mm, include_nag)
+                st.download_button("Download Cas-OFFinder input", external_text, "cas_offinder_input.txt", "text/plain")
+                st.code("cas-offinder cas_offinder_input.txt C cas_offinder_hits.tsv", language="bash")
+            except ValueError as exc:
+                st.error(str(exc))
+    st.markdown("**Scientific boundary:** verify genomic continuity, coding context, cultivar/alleles and genome-wide specificity. One representative transcript does not establish coverage of every isoform. No editing efficiency, frameshift outcome or phenotype is guaranteed.")

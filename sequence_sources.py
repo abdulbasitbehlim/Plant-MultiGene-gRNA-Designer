@@ -17,7 +17,7 @@ import time
 import requests
 from Bio import SeqIO
 
-from plant_multiguide import clean_dna, ambiguity_summary
+from plant_multiguide import clean_dna, ambiguity_summary, MAX_INPUT_BP
 
 NCBI_EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 NCBI_EMAIL = os.getenv("NCBI_EMAIL", "plant.multigene.grna@example.com")
@@ -127,18 +127,29 @@ def normalize_species_name(organism: str) -> str:
 def parse_multifasta(raw: str) -> Dict[str, str]:
     if not raw.strip():
         return {}
+    if len(raw) > 2 * MAX_INPUT_BP:
+        raise ValueError("FASTA text exceeds the interactive input limit.")
     if not any(line.lstrip().startswith(">") for line in raw.splitlines()):
         return {"sequence_1": clean_dna(raw)}
+    raw = "\n".join(line.strip() for line in raw.splitlines() if line.strip())
+    if not raw.startswith(">"):
+        raise ValueError("FASTA sequence text must follow a named header.")
     records: Dict[str, str] = {}
     for i, rec in enumerate(SeqIO.parse(StringIO(raw), "fasta"), start=1):
         name = rec.id or f"sequence_{i}"
+        if name in records:
+            raise ValueError(f"Duplicate FASTA identifier: {name}. Use unique headers.")
+        if not rec.id or not str(rec.seq):
+            raise ValueError("Every FASTA record needs a name and a nonempty sequence.")
         records[name] = clean_dna(str(rec.seq))
     if not records:
         raise ValueError("No readable FASTA records were found.")
     return records
 
 
-def manual_records(raw: str, gene_names: Sequence[str] | None = None, organism: str = "manual") -> Dict[str, GeneSequenceRecord]:
+def manual_records(raw: str, gene_names: Sequence[str] | None = None, organism: str = "manual",
+                   group_segments: bool = False) -> Dict[str, GeneSequenceRecord]:
+    raw = "\n".join(line.strip() for line in raw.splitlines())
     seqs = parse_multifasta(raw)
     raw_by_header: Dict[str, str] = {}
     if any(line.lstrip().startswith(">") for line in raw.splitlines()):
@@ -149,14 +160,29 @@ def manual_records(raw: str, gene_names: Sequence[str] | None = None, organism: 
     out: Dict[str, GeneSequenceRecord] = {}
     names = list(gene_names or [])
     pairs = list(seqs.items())
+    if names and (len(names) != len(pairs) or len(set(names)) != len(names)):
+        raise ValueError("Gene labels must be unique and match the number of FASTA records.")
     if names and len(pairs) == len(names):
         iterable = [(gene, header, seq) for gene, (header, seq) in zip(names, pairs)]
     else:
         iterable = [(header, header, seq) for header, seq in pairs]
     for gene, header, seq in iterable:
+        if group_segments:
+            if names or header.count("|") != 1 or not all(header.split("|")):
+                raise ValueError("Grouped segments require GeneID|SegmentID headers and no replacement gene labels.")
+            gene = header.split("|")[0]
         count, codes = _ambiguity_fields(raw_by_header.get(header, seq))
         warnings = ["Manual sequence boundaries are user supplied; confirm genomic/exonic context, intended genotype/cultivar, and assembly before experimental use."]
         _append_ambiguity_warning(warnings, count, codes)
+        if gene in out:
+            previous = out[gene]
+            previous.segments.append((header, seq))
+            previous.ambiguity_count += count
+            previous.ambiguity_codes = tuple(sorted(set(previous.ambiguity_codes) | set(codes)))
+            previous.warnings.extend(warnings[1:])
+            previous.sequence_sha256 = ""
+            previous.__post_init__()
+            continue
         out[gene] = GeneSequenceRecord(
             gene=gene, organism=organism, source="Manual FASTA", accession=header,
             description=f"Manual sequence: {header}", segments=[(header, seq)], warnings=warnings,
@@ -164,6 +190,56 @@ def manual_records(raw: str, gene_names: Sequence[str] | None = None, organism: 
             source_record_version="user-supplied", ambiguity_count=count, ambiguity_codes=codes,
         )
     return out
+
+
+def extract_coding_segments(rec) -> Tuple[List[Tuple[str, str]], List[str]]:
+    """Keep CDS parts and exons independent, including pieces shorter than 23 nt."""
+    seq = clean_dna(str(rec.seq))
+    cds = [f for f in rec.features if f.type == "CDS"]
+    exons = [f for f in rec.features if f.type == "exon"]
+    if len(cds) > 1:
+        raise ValueError("Multiple CDS annotations found. Use a gene-specific accession or reviewed segments.")
+    if not seq or len(seq) > MAX_INPUT_BP:
+        raise ValueError("Nucleotide record is empty or exceeds the interactive length limit.")
+    if not cds:
+        return [("accession_sequence", seq)], ["No CDS feature was found; full sequence requires coding and genomic context review."]
+    parts = cds[0].location.parts
+    intervals = []
+    for part in parts:
+        start, end = int(part.start), int(part.end)
+        if exons:
+            for exon in exons:
+                for ep in exon.location.parts:
+                    a, b = max(start, int(ep.start)), min(end, int(ep.end))
+                    if b > a:
+                        intervals.append((a, b))
+        else:
+            intervals.append((start, end))
+    if not intervals:
+        raise ValueError("CDS and exon annotations do not overlap; inspect the source record.")
+    # Do not concatenate adjacent exons or fall back to a spliced CDS for short exons.
+    prefix = "coding_exon" if exons else "coding_part" if len(parts) > 1 else "spliced_CDS"
+    segments = [(f"{prefix}_{i}:{a+1}-{b}", seq[a:b])
+                for i, (a, b) in enumerate(sorted(set(intervals)), 1)]
+    warnings = []
+    if not exons and len(parts) == 1:
+        warnings.append("Exon boundaries were unavailable; spliced CDS targeting is provisional until genomic mapping excludes junction-spanning candidates.")
+    return segments, warnings
+
+
+def validate_record_set(records: Dict[str, GeneSequenceRecord]) -> None:
+    """Reject known duplicate gene labels and mixed species, without guessing homology."""
+    genes = [r.gene.casefold() for r in records.values()]
+    if len(set(genes)) != len(genes):
+        raise ValueError("Two records resolve to the same gene. Combine reviewed exons or choose distinct genes.")
+    resolved = [(r.source.split()[0], r.source_record_version) for r in records.values()
+                if r.source != "Manual FASTA" and r.source_record_version not in {"unknown", "user-supplied"}]
+    if len(set(resolved)) != len(resolved):
+        raise ValueError("Two inputs resolve to the same source record. Use distinct genes rather than aliases.")
+    organisms = {normalize_species_name(r.organism) for r in records.values()
+                 if r.organism.lower() not in {"unknown", "manual"}}
+    if len(organisms) > 1:
+        raise ValueError("Records resolve to different organisms. Use one plant organism per design.")
 
 def _requests_get(url: str, *, params=None, headers=None, timeout: int = 30, retries: int = 3):
     err = None
@@ -189,6 +265,8 @@ def fetch_ncbi_gene(gene: str, organism: str) -> GeneSequenceRecord:
     ids = s.json().get("esearchresult", {}).get("idlist", [])
     if not ids:
         raise ValueError(f"NCBI Gene could not resolve '{gene}' in '{organism}'.")
+    if len(ids) != 1:
+        raise ValueError(f"NCBI found multiple genes for '{gene}'. Use a unique accession or reviewed FASTA.")
 
     link = _requests_get(
         f"{NCBI_EUTILS}/elink.fcgi",
@@ -215,31 +293,7 @@ def fetch_ncbi_gene(gene: str, organism: str) -> GeneSequenceRecord:
         return (0 if has_cds else 1, prefix, -len(rec.seq))
 
     rec = sorted(records, key=record_rank)[0]
-    warnings: List[str] = []
-    seq = clean_dna(str(rec.seq))
-    cds_features = [f for f in rec.features if f.type == "CDS"]
-    exon_features = [f for f in rec.features if f.type == "exon"]
-    segments: List[Tuple[str, str]] = []
-
-    if cds_features:
-        cds = cds_features[0]
-        cds_start, cds_end = int(cds.location.start), int(cds.location.end)
-        for idx, exon in enumerate(exon_features, start=1):
-            e0, e1 = int(exon.location.start), int(exon.location.end)
-            a, b = max(e0, cds_start), min(e1, cds_end)
-            if b > a:
-                piece = seq[a:b]
-                if len(piece) >= 23:
-                    segments.append((f"coding_exon_{idx}:{a+1}-{b}", piece))
-        if not segments:
-            piece = seq[cds_start:cds_end]
-            if piece:
-                segments = [(f"spliced_CDS:{cds_start+1}-{cds_end}", piece)]
-                warnings.append("Exon features were unavailable; candidate scanning uses the spliced CDS, so genomic exon mapping must be checked to exclude junction-spanning candidates.")
-    else:
-        warnings.append("No CDS feature was found in the selected RefSeq RNA record; scanning uses the full transcript and requires genomic/exon review.")
-        segments = [("transcript", seq)]
-
+    segments, warnings = extract_coding_segments(rec)
     amb_count, amb_codes = _ambiguity_fields(str(rec.seq))
     _append_ambiguity_warning(warnings, amb_count, amb_codes)
     genomic_record = _ncbi_genomic_record(ids[0], common)

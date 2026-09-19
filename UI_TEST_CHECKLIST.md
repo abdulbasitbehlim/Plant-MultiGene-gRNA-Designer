@@ -20,6 +20,7 @@ python -m streamlit run app.py
 - Gene lookup form submits and errors are human-readable when a lookup fails.
 - Manual FASTA form accepts valid FASTA and reports ambiguity warnings when IUPAC ambiguity is present.
 - Provenance section shows source/version, assembly/genomic record, annotation release/date, retrieval UTC and SHA-256.
+- Saved settings and provenance are displayed as readable tables; no raw expandable JSON block is shown on-screen.
 - Ranked table renders without clipped columns.
 - PASS / REVIEW / FAIL validation checklist opens and matches the selected guide.
 - Custom/existing-guide validator accepts a valid 20-nt spacer and rejects malformed input.

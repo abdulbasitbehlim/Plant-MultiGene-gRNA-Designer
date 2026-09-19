@@ -12,6 +12,9 @@ def test_streamlit_ui_source_contract():
         "Validate a custom 20-nt guide against these genes",
         "Recommended interactive range",
         "sequence SHA-256",
+        "Saved design settings",
+        "Provenance field",
     ]
     for marker in required:
         assert marker in text
+    assert "st.json(" not in text

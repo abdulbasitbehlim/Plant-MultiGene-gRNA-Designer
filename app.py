@@ -27,6 +27,38 @@ from validation import validate_shared_guide, validation_summary_row
 from run_state import (APP_VERSION, create_run_snapshot, panel_result_key, export_input_fasta, export_run, cas_offinder_input)
 
 
+def _table_value(value):
+    """Convert structured values into readable text for UI tables."""
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, dict):
+        return " | ".join(
+            f"{str(key).replace('_', ' ').title()}: {_table_value(item)}"
+            for key, item in value.items()
+        ) or "None"
+    if isinstance(value, (list, tuple, set)):
+        items = list(value)
+        if isinstance(value, set):
+            items = sorted(items, key=str)
+        return ", ".join(_table_value(item) for item in items) or "None"
+    return str(value)
+
+
+def key_value_table(data, field_label="Field", value_label="Value"):
+    """Return a consistent two-column table instead of exposing raw JSON in the UI."""
+    return pd.DataFrame(
+        [
+            {
+                field_label: str(key).replace("_", " ").title(),
+                value_label: _table_value(value),
+            }
+            for key, value in data.items()
+        ]
+    )
+
+
 def clear_design_state():
     for key in list(st.session_state):
         if key.startswith("plant_") and key not in {"plant_custom_spacer"}:
@@ -240,7 +272,12 @@ if "plant_guides" in st.session_state:
     if settings != current_settings:
         st.warning("Settings have changed. Displayed results and exports still use the saved run settings below. Submit Design shared guides again to apply the new settings.")
     st.caption(f"Saved run {snapshot['run_id'][:12]} · {snapshot['created_at_utc']}")
-    st.json(settings, expanded=False)
+    st.markdown("#### Saved design settings")
+    st.dataframe(
+        key_value_table(settings, "Setting", "Saved value"),
+        hide_index=True,
+        use_container_width=True,
+    )
     validation_kwargs = dict(expected_genes=len(records), expected_gene_ids=list(records),
         max_mismatches_per_gene=settings["max_mismatches_per_gene"],
         max_seed_mismatches_per_gene=settings["max_seed_mismatches_per_gene"],
@@ -259,7 +296,11 @@ if "plant_guides" in st.session_state:
         for gene, rec in records.items():
             st.markdown(f"**{gene}** — {rec.source} · `{rec.accession}` · {rec.total_bp:,} bp in {len(rec.segments)} segments")
             st.caption(f"sequence SHA-256: {rec.sequence_sha256}")
-            st.json(rec.provenance_dict(), expanded=False)
+            st.dataframe(
+                key_value_table(rec.provenance_dict(), "Provenance field", "Value"),
+                hide_index=True,
+                use_container_width=True,
+            )
             for warning in rec.warnings:
                 st.warning(warning)
     if settings["include_mismatch_aware"]:

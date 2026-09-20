@@ -2,6 +2,8 @@
 
 A Python/Streamlit research tool for asking a specific CRISPR design question: **can one SpCas9 spacer plausibly target every member of a user-defined plant gene set?** The tool searches exact shared targets and mismatch-aware consensus targets, preserves sequence provenance, validates every candidate, and makes its search limits explicit.
 
+**Keywords:** `bioinformatics` · `crispr` · `grna` · `plant-genomics` · `spcas9` · `streamlit` · `computational-biology` · `multi-gene-targeting`
+
 
 ## What changed in version 1.4.0
 

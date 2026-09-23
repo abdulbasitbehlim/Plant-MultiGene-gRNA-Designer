@@ -1,3 +1,24 @@
+# ============================================================================
+# TEST VALIDATION
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Contains automated tests that protect the Plant MultiGene gRNA
+# Designer from accidental behaviour changes.
+#
+# HOW TO READ THIS FILE:
+# 1. A test prepares sample input.
+# 2. It calls the function being checked.
+# 3. Assertions compare the result with the expected behaviour.
+# 4. Test expectations are kept unchanged; only explanatory structure is added.
+#
+# MAIN TOP-LEVEL PARTS:
+# - function: _match
+# - function: test_exact_shared_validation_passes_core_rules
+# - function: test_missing_gene_is_hard_failure
+# - function: test_poly_t_is_review_not_hard_failure
+# ============================================================================
+
 from plant_multiguide import GeneMatch, SharedGuide
 from validation import validate_shared_guide
 

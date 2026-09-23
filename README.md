@@ -1,215 +1,367 @@
 # Plant MultiGene gRNA Designer v1.4.0
 
-A Python/Streamlit research tool for asking a specific CRISPR design question: **can one SpCas9 spacer plausibly target every member of a user-defined plant gene set?** The tool searches exact shared targets and mismatch-aware consensus targets, preserves sequence provenance, validates every candidate, and makes its search limits explicit.
+Plant MultiGene gRNA Designer is a Python and Streamlit research tool for a simple but important CRISPR question:
 
-**Keywords:** `bioinformatics` · `crispr` · `grna` · `plant-genomics` · `spcas9` · `streamlit` · `computational-biology` · `multi-gene-targeting`
+**Can one SpCas9 guide target several related plant genes at the same time?**
 
+The program is designed for multi-gene targeting, especially when several homologous genes may have overlapping or redundant biological functions.
 
-## What changed in version 1.4.0
+**Live app:** https://plant-multigene-grna-designer.onrender.com/  
+**Repository:** https://github.com/abdulbasitbehlim/Plant-MultiGene-gRNA-Designer
 
-- Constraint-aware target selection fixes false-negative designs and retains feasible observed alternatives.
-- Duplicate FASTA IDs, ambiguous gene lookup, duplicate resolved records and mixed species are rejected.
-- Group independent exon records using `GeneID|SegmentID`; short exons and compound CDS parts stay separate.
-- Saved run settings prevent stale validation. Panel results follow the exact run, spacer, panel and radius.
-- Empty panels are rejected; total hits, displayed hits, truncation and panel fingerprints are recorded.
-- An exact guide-set fallback proposes several guides when a shared single guide is unavailable.
-- Complete run JSON includes actual sequences and settings; input-segment FASTA can be rerun.
-- Cas-OFFinder 2 input can be exported for a separate genome-wide specificity workflow.
+> The free Render service may take a little time to wake up after inactivity.
 
-Read [the research audit](docs/RESEARCH_AUDIT.md), [updated user guide](USER_GUIDE.md), and [synthetic examples](examples/README.md). The existing PUP benchmark remains a selected locked context regression, not experimental validation of this software.
+---
 
-## Live app
+## What this tool does
 
-**Run the Plant MultiGene app:** https://plant-multigene-grna-designer.onrender.com/
+In simple terms, the program:
 
-**Give feedback:** https://github.com/abdulbasitbehlim/Plant-MultiGene-gRNA-Designer/issues/new?template=feedback.yml
+1. receives two or more plant gene sequences;
+2. finds SpCas9-compatible 20 nt targets next to NGG PAMs;
+3. looks for guides that can work across all requested genes;
+4. checks exact matches first;
+5. can also search mismatch-aware consensus guides;
+6. validates every candidate;
+7. keeps the exact sequence source and settings used in the run;
+8. exports results for later review.
 
-**GitHub repository:** https://github.com/abdulbasitbehlim/Plant-MultiGene-gRNA-Designer
+The tool is meant for **research prioritization and teaching**.
 
-> The Render free tier may sleep after inactivity, so the first load can take longer while the service wakes up.
+It does not replace whole-genome off-target analysis or experimental validation.
 
-## Statement of need
+---
 
-Single-gene CRISPR designers are optimized for choosing guides against one locus. Plant functional redundancy often requires a different workflow: a researcher may want one sgRNA that intentionally recognizes several homologous genes. CRISPR MultiTargeter, CRISPys and Multi-Knock established this multi-target design problem, but reproducible interpretation still depends on target provenance, exon boundaries, mismatch assumptions and search semantics. This project provides a small, auditable workflow that keeps those decisions visible instead of reporting an unexplained universal score. It is intended for research prioritization and teaching, not as a substitute for genome-wide off-target analysis or experimental validation.
+## Two design modes
 
-## What is different
+### 1. Exact shared guide
 
-| Capability | This tool | CRISPR MultiTargeter | CRISPys / Multi-Knock |
-|---|---|---|---|
-| User-defined multi-gene shared-guide search | Yes | Yes | Yes |
-| Exact shared-guide mode separated from mismatch-aware mode | Yes | Common-target workflow | Optimization-focused |
-| Search semantics documented in code/docs | Seed-exhaustive over observed PAM-compatible spacers; no first-hit stopping | Alignment-oriented | Hierarchical/optimization strategy |
-| Exon continuity checks | Independent segments, with provisional warnings when annotation is missing | Individual-exon checks in annotated workflows | Input and annotation dependent |
-| Per-run accession/version + assembly/release + SHA-256 sequence fingerprint | Yes | Not the focus of the original publication | Not the focus of the original publication |
-| Explicit workload ceiling | Yes | Different implementation | Designed for larger analyses |
-| Local validation and custom-guide check | Yes | Tool-specific | Tool-specific |
+The same 20 nt spacer must occur next to an NGG PAM in every requested gene.
 
-This table describes design scope, not a claim that this implementation is globally superior.
+This is the simplest case because one identical spacer is present in all genes.
 
-## Scientific design modes
+### 2. Mismatch-aware consensus guide
 
-1. **Exact shared guide** — the identical 20-nt spacer occurs next to an NGG PAM in every requested gene.
-2. **Mismatch-aware consensus guide** — a single spacer has a PAM-compatible near-match in every requested gene while satisfying user-selected total-mismatch, PAM-proximal seed-mismatch and compatibility-proxy constraints.
+The tool can also search for one spacer that has acceptable PAM-compatible near-matches in every gene.
 
-Mismatch-aware search is **seed-exhaustive over every distinct observed PAM-compatible spacer**. It does not stop after the first acceptable seed. For each seed, all constraints are applied before selecting the best feasible target per gene. Feasible observed spacers are retained alongside accepted majority-consensus proposals. All unique proposals are ranked before `max_results` is applied. It is **not** exhaustive over all theoretical `4^20` synthetic spacers, so “rank 1” means best among generated proposals rather than a proof of a mathematical global optimum.
+The user can control things such as:
 
-## Published validation-construct regression
+- total mismatches;
+- PAM-proximal seed mismatches;
+- compatibility limits.
 
-Hu et al. (*Nature Plants*, 2023; DOI `10.1038/s41477-023-01374-4`) report two distinct PUP guide contexts. The **CR8/21 screen line** is a PUP8/PUP21 guide and its Figure 5 legend explicitly states that it was not designed to target PUP7 because that guide lacks a corresponding PUP7 PAM. Separately, the cloning Methods describe the 20-nt protospacer
+The search checks every distinct observed PAM-compatible spacer as a possible starting point.
 
-`CTCTACTTTCTCCCTCATCT`
+It does not search every theoretical sequence in the full 4^20 sequence space.
 
-as being picked to target **PUP7 / AT4G18197**, **PUP8 / AT4G18195** and **PUP21 / AT4G18205** at once for follow-up validation.
+---
 
-The v1.3.1 benchmark therefore treats this sequence as a **published three-gene validation construct**, not as a verified member of the 5,635-guide transportome library. The publisher identifies Supplementary Data 1 as the all-family sgRNA library, but that binary assignment table was not directly retrieved in this artifact environment, so library membership is deliberately left **unverified**.
+## Why multi-gene design is useful
 
-The locked generation regression gives the designer only the bundled PUP target contexts. It does not pass the published spacer into the design function. Result:
+In plants, related genes can sometimes perform overlapping functions.
 
-| Published validation spacers | Exact spacer recovered | Rank | Exact target sequences | PAM-compatible targets | Worst mismatch |
-|---:|---:|---:|---:|---:|---:|
-| 1 | **1** | **1** | 2/3 | 3/3 | 1 |
+Knocking out only one member of a gene family may therefore produce a weak or incomplete phenotype.
 
-**Definition:** “exact spacer recovered” means that the algorithm emitted the identical 20-nt sequence. Per-gene mismatches are a separate target-compatibility measurement and do not convert a near-hit into an exact recovery. The stronger phrase **“library guide rediscovered” is not used** unless both spacer sequence and intended target assignment are directly verified in the published library table. See `benchmarks/BENCHMARK_EVIDENCE_RESOLUTION.md`.
+A shared guide can be useful when the scientific goal is to intentionally target several homologous genes together.
 
-A stronger future library benchmark is the tomato NPF1.10/NPF1.11/NPF1.12 case reported by Berman et al. (2025), where the paper unambiguously states that one sgRNA targets all three genes with zero mismatches. Its exact guide sequence still needs direct Supplementary Data 1 verification before exact-guide concordance is claimed.
+This software is designed around that specific use case.
 
-## Head-to-head comparison status
+---
 
-A machine-readable concordance workflow is included in `benchmarks/concordance.py` and `benchmarks/EXTERNAL_COMPARISON_PROTOCOL.md`.
-
-| Comparator | Frozen input | Current artifact status | Concordance counts |
-|---|---|---|---|
-| CRISPys | Hu PUP validation trio | Published-method reference; fresh external rerun still required | **Not claimed** |
-| CRISPR MultiTargeter | Hu PUP validation trio | Reproducible comparison protocol prepared; external service not executed in this build | **Not claimed** |
-
-The package intentionally does not invent “both/ours-only/external-only” counts. Before a manuscript submission, run the comparators against the **same frozen sequences, PAM model, target regions and score thresholds**, export a `guide` column, then execute `benchmarks/concordance.py` and commit the resulting table.
-
-## Inputs
+## Input options
 
 ### Gene lookup
-Enter two or more gene symbols/IDs and one plant organism. NCBI RefSeq mode tries to retain coding exon pieces from a representative versioned RefSeq RNA. Ensembl REST mode scans individual transcript exons. Sequence retrieval records source/version, genomic assembly/accession or assembly name, annotation release/date when available, UTC retrieval time and a SHA-256 fingerprint of the exact segments used.
 
-### Accession ID
-Enter two or more known NCBI nucleotide/RefSeq accessions or Ensembl stable gene/transcript IDs. The tool retrieves each record directly, preserves accession/version and sequence provenance, and then runs the same shared-guide workflow across the retrieved genes.
+Enter two or more gene symbols or IDs from one plant organism.
+
+The program can retrieve sequence data from supported public biological resources while keeping source and version information when available.
+
+### Accession IDs
+
+You can provide known NCBI nucleotide/RefSeq accessions or Ensembl stable IDs.
 
 ### Manual multi-FASTA
-Provide one FASTA record per gene, or enable grouped segments and use `GeneID|SegmentID` for separate exons. Duplicate identifiers and empty records are rejected. This is useful for cultivar-specific sequences or frozen reviewed target sequences. Ambiguous IUPAC bases (`N`, `R`, `Y`, etc.) are normalized to `N`; any spacer window containing ambiguity is skipped rather than silently treated as a mismatch.
 
-## Runnable example
+You can also paste or upload your own sequences.
 
-In the Streamlit app choose **Gene lookup**, organism **Arabidopsis thaliana**, and enter:
+Each FASTA record normally represents one gene.
 
-```text
+For genes split into separate segments or exons, grouped identifiers can be written in the form:
+
+\`\`\`text
+GeneID|SegmentID
+\`\`\`
+
+Duplicate identifiers and empty records are rejected.
+
+---
+
+## Example
+
+A simple Arabidopsis example is:
+
+\`\`\`text
 AT4G18197
 AT4G18195
 AT4G18205
-```
+\`\`\`
 
-Use NCBI RefSeq or Ensembl, enable mismatch-aware design, and inspect both the guide table and exported provenance. For a publication benchmark, freeze/export the exact retrieved sequences because public annotations can change.
+These correspond to the PUP7, PUP8 and PUP21 context used in the project benchmark.
 
-## Validation
+When using database retrieval for publication-quality work, it is a good idea to export and freeze the exact sequences used, because public annotations can change over time.
 
-Each generated guide receives **PASS / REVIEW / FAIL** with a criterion-by-criterion explanation.
+---
 
-Hard checks include 20 resolved DNA bases, complete coverage of every requested gene, NGG evidence for every selected target, and the selected mismatch/seed/compatibility limits. Review checks include GC range, poly-T, long homopolymers and optional supplied-panel specificity review. A custom 20-nt guide can also be validated against all loaded genes.
+## Validation labels
 
-A PASS means the candidate satisfies rules implemented here. It does **not** mean experimentally validated editing efficacy.
+Each guide receives one of three labels:
 
-## Computational ceiling
+- **PASS**
+- **REVIEW**
+- **FAIL**
 
-- Recommended interactive range: **2–12 genes**.
-- Hard maximum: **20 genes per run**.
-- Input or local panel: **500,000 bases** each.
-- Mismatch-aware guard: **5,000,000 estimated seed-to-site comparisons**.
+These labels describe whether the candidate passed the rules implemented by the software.
 
-The guard prevents permissive searches over large gene lists from expanding without bound. For larger genome-scale library work, use a purpose-built pipeline such as CRISPys/Multi-Knock rather than bypassing the limit.
+They do **not** mean that the guide has been experimentally validated.
 
-## Installation
+### Examples of hard checks
 
-### Clean Python environment
+The software checks things such as:
 
-```bash
-python -m venv .venv
-# Linux/macOS
-source .venv/bin/activate
-# Windows PowerShell
-# .venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-streamlit run app.py
-```
+- spacer length;
+- resolved DNA bases;
+- coverage of every requested gene;
+- NGG PAM evidence;
+- mismatch limits;
+- seed-region mismatch limits.
 
-All direct runtime dependencies are exactly pinned in `requirements.txt`.
+### Review-level checks
 
-### One-command Docker run
+The program also considers practical sequence features such as:
 
-```bash
-docker compose up --build
-```
+- GC content;
+- poly-T sequences;
+- long homopolymers;
+- optional local specificity-panel results.
 
-Then open `http://localhost:8501`.
+---
 
-### Scientific-core package
+## Important safety and quality checks
 
-```bash
-pip install .
-```
+The current version also protects against several common data problems.
 
-This installs the importable scientific modules. The full Streamlit application is run from the repository with the pinned requirements above.
+- Duplicate FASTA IDs are rejected.
+- Mixed-species gene lookup is rejected.
+- Duplicate resolved biological records are rejected.
+- Ambiguous sequence bases are tracked.
+- Candidate windows containing unresolved bases are skipped.
+- Run settings are stored so old results are not reused with incompatible settings.
+- Large searches are bounded rather than allowed to grow without control.
 
-## Tests and measured coverage
+---
 
-```bash
-pip install -r requirements-dev.txt
-pytest -q --cov=. --cov-config=.coveragerc --cov-report=term-missing --cov-report=xml
-```
+## Computational limits
 
-The v1.4.0 suite passes 69 tests on Python 3.12.14, with 90.52% configured non-UI coverage. It covers the scientific core, retrieval, provenance, validation, edge cases and three actual Streamlit rerun workflows. Coverage reports are committed as `coverage.txt` and `coverage.xml`.
+The interactive tool is intended for relatively small multi-gene problems.
 
-Explicit reviewer edge cases include:
+Current limits include:
 
-- no valid PAM in any gene;
-- `N`, `R` and `Y` ambiguity inside a candidate window;
-- single-gene input rejection for a shared-guide design;
-- unrelated genes with zero acceptable shared target;
-- exon-junction avoidance;
-- mocked NCBI/Ensembl version, assembly/release and ambiguity provenance;
-- exact recovery of the locked Hu et al. validation-construct spacer, with library membership explicitly left unverified.
+- recommended range: **2–12 genes**;
+- hard maximum: **20 genes**;
+- sequence/local panel size: up to **500,000 bases** each;
+- mismatch-aware comparison guard: **5,000,000 estimated comparisons**.
 
-`app.py` is excluded from the numerical unit-coverage percentage because UI lines are not meaningfully exercised by core unit tests. `tests/test_ui_contract.py` checks required UI wiring statically, `tests/test_app_workflows.py` exercises Streamlit reruns, and `UI_TEST_CHECKLIST.md` defines additional manual visual checks.
+For very large genome-scale library design, use a purpose-built large-scale workflow instead of bypassing these limits.
 
-## Continuous integration
+---
 
-`.github/workflows/ci.yml` runs the pinned test environment on Python 3.11, 3.12 and 3.13 for every push and pull request, generates coverage, and enforces a minimum total coverage threshold.
+## How the ranking works
 
-## Scoring boundaries
+The tool uses a transparent **compatibility proxy** for multi-gene ranking.
 
-The multi-gene **compatibility proxy** is intentionally transparent and dependency-light. It is not CFD, MOFF, CRISTA or a calibrated cleavage probability. A final experimental shortlist should be re-evaluated using a genome-aware off-target workflow and, where appropriate, modern empirical specificity/activity models.
+It is intentionally simple and inspectable.
+
+It is **not** the same as:
+
+- CFD;
+- MOFF;
+- CRISTA;
+- a calibrated cleavage probability;
+- a guaranteed editing-efficiency model.
+
+A final experimental shortlist should still be checked with appropriate genome-aware specificity and activity tools.
+
+---
 
 ## Reproducibility
 
-Exports retain, when available:
+The software stores as much biological provenance as possible.
 
-- versioned source accession/transcript;
-- genomic chromosome/accession or assembly name;
-- annotation release or RefSeq/GenBank record date;
-- UTC retrieval timestamp;
-- exact sequence-set SHA-256;
-- ambiguity counts/codes and warnings.
+Exports may include:
 
-The SHA-256 value allows a later rerun to detect when the biological input sequence has changed even if a public gene identifier is unchanged.
+- versioned accessions or transcript IDs;
+- chromosome/accession or assembly information;
+- annotation version/date;
+- retrieval time;
+- exact sequence-set SHA-256 fingerprint;
+- ambiguity counts and warnings;
+- run settings.
 
-## Citation and archival release
+The SHA-256 fingerprint is useful because it can reveal when the actual biological input sequence has changed even if the public gene identifier has stayed the same.
 
-`CITATION.cff` and `.zenodo.json` are included. **No DOI has been minted in this local package.** After final review, create a public tagged release, archive that exact release with Zenodo, then insert the minted DOI into `CITATION.cff`, README and any manuscript. See `RELEASE_CHECKLIST.md`.
+---
 
-## Key literature
+## Published validation-context regression
 
-- Prykhozhij SV, Rajan V, Gaston D, Berman JN. CRISPR MultiTargeter. *PLoS One*. 2015;10:e0119372. DOI: `10.1371/journal.pone.0119372`.
-- Hyams G, et al. CRISPys: Optimal sgRNA Design for Editing Multiple Members of a Gene Family Using the CRISPR System. *Journal of Molecular Biology*. 2018;430:2184–2195. DOI: `10.1016/j.jmb.2018.03.019`.
-- Hu Y, et al. Multi-Knock—a multi-targeted genome-scale CRISPR toolbox to overcome functional redundancy in plants. *Nature Plants*. 2023;9:572–587. DOI: `10.1038/s41477-023-01374-4`.
-- Berman A, et al. Construction of multi-targeted CRISPR libraries in tomato to overcome functional redundancy at genome-scale level. *Nature Communications*. 2025. DOI: `10.1038/s41467-025-59280-6`.
+The repository includes a regression example based on the PUP7/PUP8/PUP21 context reported by Hu et al. (2023).
 
-## License and support
+The published spacer:
 
-Original code in this repository is MIT licensed. See `LICENSE`, `CONTRIBUTING.md` and `SUPPORT.md`. Research software; no warranty of experimental performance.
+\`\`\`text
+CTCTACTTTCTCCCTCATCT
+\`\`\`
+
+is used as a known reference context for software testing.
+
+The benchmark checks whether the program can recover that spacer from the bundled target sequences without directly giving the spacer to the design function.
+
+This is a **software regression benchmark**, not proof that the current software itself has been experimentally validated.
+
+See:
+
+- [benchmarks/BENCHMARK_EVIDENCE_RESOLUTION.md](benchmarks/BENCHMARK_EVIDENCE_RESOLUTION.md)
+- [docs/RESEARCH_AUDIT.md](docs/RESEARCH_AUDIT.md)
+
+---
+
+## Installation
+
+Clone the repository:
+
+\`\`\`bash
+git clone https://github.com/abdulbasitbehlim/Plant-MultiGene-gRNA-Designer.git
+cd Plant-MultiGene-gRNA-Designer
+\`\`\`
+
+Create a virtual environment:
+
+\`\`\`bash
+python -m venv .venv
+\`\`\`
+
+Activate it.
+
+### Windows PowerShell
+
+\`\`\`powershell
+.venv\Scripts\Activate.ps1
+\`\`\`
+
+### Linux/macOS
+
+\`\`\`bash
+source .venv/bin/activate
+\`\`\`
+
+Install the required packages:
+
+\`\`\`bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+\`\`\`
+
+Start the app:
+
+\`\`\`bash
+streamlit run app.py
+\`\`\`
+
+---
+
+## Docker
+
+You can also run the project with Docker:
+
+\`\`\`bash
+docker compose up --build
+\`\`\`
+
+Then open:
+
+\`\`\`text
+http://localhost:8501
+\`\`\`
+
+---
+
+## Scientific-core package
+
+The reusable Python modules can also be installed with:
+
+\`\`\`bash
+pip install .
+\`\`\`
+
+The full Streamlit interface is still run from the repository.
+
+---
+
+## Main project files
+
+- \`app.py\` — Streamlit user interface.
+- \`plant_multiguide.py\` — main multi-gene guide design logic.
+- \`sequence_sources.py\` — biological sequence retrieval.
+- \`accession_sources.py\` — accession handling.
+- \`validation.py\` — guide and input validation.
+- \`run_state.py\` — keeps run settings/results consistent.
+- \`benchmarks/\` — reproducibility and benchmark scripts.
+- \`tests/\` — automated tests.
+
+---
+
+## Running the tests
+
+Install development requirements and run:
+
+\`\`\`bash
+pip install -r requirements-dev.txt
+pytest -q --cov=. --cov-config=.coveragerc --cov-report=term-missing --cov-report=xml
+\`\`\`
+
+The repository also contains continuous-integration checks for supported Python versions.
+
+---
+
+## Additional documentation
+
+For more detailed explanations, see:
+
+- [USER_GUIDE.md](USER_GUIDE.md)
+- [docs/RESEARCH_AUDIT.md](docs/RESEARCH_AUDIT.md)
+- [examples/README.md](examples/README.md)
+- [UI_TEST_CHECKLIST.md](UI_TEST_CHECKLIST.md)
+- [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
+
+---
+
+## Key references
+
+- Prykhozhij SV, Rajan V, Gaston D, Berman JN. CRISPR MultiTargeter. *PLoS One*. 2015. DOI: 10.1371/journal.pone.0119372
+- Hyams G, et al. CRISPys. *Journal of Molecular Biology*. 2018. DOI: 10.1016/j.jmb.2018.03.019
+- Hu Y, et al. Multi-Knock. *Nature Plants*. 2023. DOI: 10.1038/s41477-023-01374-4
+- Berman A, et al. Multi-targeted CRISPR libraries in tomato. *Nature Communications*. 2025. DOI: 10.1038/s41467-025-59280-6
+
+---
+
+## Citation and license
+
+Citation metadata is available in:
+
+- [CITATION.cff](CITATION.cff)
+- [.zenodo.json](.zenodo.json)
+
+A DOI should only be added after an actual archived release has been created and Zenodo has minted the DOI.
+
+The original code in this repository is available under the **MIT License**.
+
+This is research software and carries no guarantee of experimental performance.

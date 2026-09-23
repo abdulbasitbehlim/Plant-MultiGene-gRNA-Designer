@@ -1,3 +1,23 @@
+# ============================================================================
+# TEST SEQUENCE SOURCES
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Contains automated tests that protect the Plant MultiGene gRNA
+# Designer from accidental behaviour changes.
+#
+# HOW TO READ THIS FILE:
+# 1. A test prepares sample input.
+# 2. It calls the function being checked.
+# 3. Assertions compare the result with the expected behaviour.
+# 4. Test expectations are kept unchanged; only explanatory structure is added.
+#
+# MAIN TOP-LEVEL PARTS:
+# - function: test_parse_multifasta_and_manual_records
+# - function: test_species_aliases
+# - function: test_manual_provenance_and_ambiguity_fingerprint
+# ============================================================================
+
 from sequence_sources import parse_multifasta, manual_records, normalize_species_name
 
 

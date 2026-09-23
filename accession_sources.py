@@ -1,3 +1,26 @@
+# ============================================================================
+# ACCESSION SOURCES
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Retrieves and normalizes accession-based plant sequence sources used by the multi-gene workflow.
+#
+# HOW TO READ THIS FILE:
+# 1. Read the imports/constants first to see which tools and settings are used.
+# 2. Read one top-level function or class at a time.
+# 3. Follow the workflow from input sequence -> candidate guides -> validation -> output.
+# 4. Scientific formulas, thresholds, validation decisions and public function names
+#    are intentionally preserved while readability comments are added.
+#
+# MAIN TOP-LEVEL PARTS:
+# - function: _gene_label_from_genbank
+# - function: _segments_from_ncbi_record
+# - function: fetch_ncbi_accession
+# - function: _select_ensembl_transcript
+# - function: fetch_ensembl_accession
+# - function: fetch_accession
+# ============================================================================
+
 #!/usr/bin/env python3
 """Direct accession-ID retrieval for the Plant MultiGene gRNA Designer.
 
@@ -29,6 +52,10 @@ from sequence_sources import (
 )
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: _gene_label_from_genbank
+# ----------------------------------------------------------------------------
 def _gene_label_from_genbank(rec, fallback: str) -> str:
     for feature_type in ("gene", "CDS"):
         for feature in rec.features:
@@ -39,10 +66,18 @@ def _gene_label_from_genbank(rec, fallback: str) -> str:
     return fallback
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: _segments_from_ncbi_record
+# ----------------------------------------------------------------------------
 def _segments_from_ncbi_record(rec) -> tuple[List[Tuple[str, str]], List[str]]:
     return extract_coding_segments(rec)
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: fetch_ncbi_accession
+# ----------------------------------------------------------------------------
 def fetch_ncbi_accession(accession: str) -> GeneSequenceRecord:
     requested = accession.strip()
     if not requested:
@@ -86,6 +121,10 @@ def fetch_ncbi_accession(accession: str) -> GeneSequenceRecord:
     )
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: _select_ensembl_transcript
+# ----------------------------------------------------------------------------
 def _select_ensembl_transcript(data: dict) -> tuple[dict, str]:
     object_type = str(data.get("object_type", "")).lower()
     if object_type == "transcript" or (data.get("Exon") and not data.get("Transcript")):
@@ -103,6 +142,10 @@ def _select_ensembl_transcript(data: dict) -> tuple[dict, str]:
     return tx, gene_label
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: fetch_ensembl_accession
+# ----------------------------------------------------------------------------
 def fetch_ensembl_accession(accession: str) -> GeneSequenceRecord:
     requested = accession.strip()
     if not requested:
@@ -173,6 +216,10 @@ def fetch_ensembl_accession(accession: str) -> GeneSequenceRecord:
     )
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: fetch_accession
+# ----------------------------------------------------------------------------
 def fetch_accession(accession: str, source: str) -> GeneSequenceRecord:
     source_l = source.lower()
     if source_l.startswith("ncbi"):

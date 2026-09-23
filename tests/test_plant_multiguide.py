@@ -1,3 +1,31 @@
+# ============================================================================
+# TEST PLANT MULTIGUIDE
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Contains automated tests that protect the Plant MultiGene gRNA Designer workflow from accidental behaviour changes.
+#
+# HOW TO READ THIS FILE:
+# 1. Tests first prepare an input or fixture.
+# 2. The relevant program function is called.
+# 3. Assertions check that the result still matches the expected behaviour.
+# 4. Test logic and expected scientific results are intentionally unchanged.
+#
+# MAIN TOP-LEVEL PARTS:
+# - function: flank
+# - function: test_clean_dna_and_reverse_complement
+# - function: test_scan_plus_and_reverse_sites
+# - function: test_exact_shared_guide_across_three_genes
+# - function: test_mismatch_aware_consensus_targets_all_genes
+# - function: test_mismatch_helpers
+# - function: test_no_forced_result_for_unrelated_sequences
+# - function: test_reference_panel_screen
+# - function: test_ambiguity_is_skipped_in_spacer_but_allowed_at_degenerate_pam_base
+# - function: test_search_diagnostics_state_seed_exhaustive_strategy
+# - function: test_mismatch_search_workload_guard_is_enforced
+# - function: test_hard_gene_count_ceiling
+# ============================================================================
+
 from plant_multiguide import (
     clean_dna,
     reverse_complement,
@@ -10,15 +38,27 @@ from plant_multiguide import (
 )
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: flank
+# ----------------------------------------------------------------------------
 def flank(spacer, pam="AGG"):
     return "TTTTT" + spacer + pam + "AAAAA"
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_clean_dna_and_reverse_complement
+# ----------------------------------------------------------------------------
 def test_clean_dna_and_reverse_complement():
     assert clean_dna(">x\nacgu rys") == "ACGTNNN"
     assert reverse_complement("ACGTN") == "NACGT"
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_scan_plus_and_reverse_sites
+# ----------------------------------------------------------------------------
 def test_scan_plus_and_reverse_sites():
     spacer = "ACGTACGTACGTACGTACGA"
     plus = scan_spcas9(flank(spacer), "G1", "exon1")
@@ -31,6 +71,10 @@ def test_scan_plus_and_reverse_sites():
     assert any(s.spacer == desired and s.strand == "-" and s.pam.endswith("GG") for s in rev)
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_exact_shared_guide_across_three_genes
+# ----------------------------------------------------------------------------
 def test_exact_shared_guide_across_three_genes():
     spacer = "ACGTACGTACGTACGTACGA"
     genes = {
@@ -48,6 +92,10 @@ def test_exact_shared_guide_across_three_genes():
     assert g.exact_gene_count == 3
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_mismatch_aware_consensus_targets_all_genes
+# ----------------------------------------------------------------------------
 def test_mismatch_aware_consensus_targets_all_genes():
     s1 = "ACGTACGTACGTACGTACGA"
     s2 = "ACGTTCGTACGTACGTACGA"  # position 5 mismatch
@@ -69,6 +117,10 @@ def test_mismatch_aware_consensus_targets_all_genes():
     assert any(g.design_type == "Mismatch-aware consensus" for g in guides)
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_mismatch_helpers
+# ----------------------------------------------------------------------------
 def test_mismatch_helpers():
     a = "A" * 20
     b = "A" * 12 + "C" + "A" * 7
@@ -77,6 +129,10 @@ def test_mismatch_helpers():
     assert seed_mismatch_count(pos) == 1
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_no_forced_result_for_unrelated_sequences
+# ----------------------------------------------------------------------------
 def test_no_forced_result_for_unrelated_sequences():
     genes = {
         "G1": [("e1", flank("ACGTACGTACGTACGTACGA"))],
@@ -88,6 +144,10 @@ def test_no_forced_result_for_unrelated_sequences():
     assert guides == []
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_reference_panel_screen
+# ----------------------------------------------------------------------------
 def test_reference_panel_screen():
     guide = "ACGTACGTACGTACGTACGA"
     panel = {"contig1": flank(guide), "contig2": "A" * 80}
@@ -97,6 +157,10 @@ def test_reference_panel_screen():
     assert hits[0].mismatches == 0
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_ambiguity_is_skipped_in_spacer_but_allowed_at_degenerate_pam_base
+# ----------------------------------------------------------------------------
 def test_ambiguity_is_skipped_in_spacer_but_allowed_at_degenerate_pam_base():
     from plant_multiguide import ambiguity_summary, scan_spcas9
     spacer = "ACGTACGTACGTACGTACGA"
@@ -112,6 +176,10 @@ def test_ambiguity_is_skipped_in_spacer_but_allowed_at_degenerate_pam_base():
     assert not any(s.start == 6 for s in sites2)
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_search_diagnostics_state_seed_exhaustive_strategy
+# ----------------------------------------------------------------------------
 def test_search_diagnostics_state_seed_exhaustive_strategy():
     from plant_multiguide import design_shared_guides, estimate_search_diagnostics
     s1 = "ACGTACGTACGTACGTACGA"
@@ -125,6 +193,10 @@ def test_search_diagnostics_state_seed_exhaustive_strategy():
     assert "not exhaustive over all 4^20" in d.strategy
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_mismatch_search_workload_guard_is_enforced
+# ----------------------------------------------------------------------------
 def test_mismatch_search_workload_guard_is_enforced():
     import pytest
     from plant_multiguide import design_shared_guides
@@ -136,6 +208,10 @@ def test_mismatch_search_workload_guard_is_enforced():
         design_shared_guides(genes, include_mismatch_aware=True, max_pair_comparisons=1)
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_hard_gene_count_ceiling
+# ----------------------------------------------------------------------------
 def test_hard_gene_count_ceiling():
     import pytest
     from plant_multiguide import design_shared_guides, MAX_GENES

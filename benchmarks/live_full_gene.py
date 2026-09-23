@@ -1,3 +1,18 @@
+# ============================================================================
+# LIVE FULL GENE
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Runs a live full-gene benchmark example against the supported sequence workflow.
+#
+# HOW TO READ THIS FILE:
+# 1. Read the imports/constants first to see which tools and settings are used.
+# 2. Read one top-level function or class at a time.
+# 3. Follow the workflow from input sequence -> candidate guides -> validation -> output.
+# 4. Scientific formulas, thresholds, validation decisions and public function names
+#    are intentionally preserved while readability comments are added.
+# ============================================================================
+
 """Network-enabled exact-spacer recovery rerun for the Hu et al. validation construct.
 
 Retrieves current versioned NCBI records, independently generates guide candidates, and

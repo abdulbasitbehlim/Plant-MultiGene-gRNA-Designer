@@ -1,3 +1,22 @@
+# ============================================================================
+# TEST BENCHMARK REGRESSION
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Contains automated tests that protect the Plant MultiGene gRNA Designer workflow from accidental behaviour changes.
+#
+# HOW TO READ THIS FILE:
+# 1. Tests first prepare an input or fixture.
+# 2. The relevant program function is called.
+# 3. Assertions check that the result still matches the expected behaviour.
+# 4. Test logic and expected scientific results are intentionally unchanged.
+#
+# MAIN TOP-LEVEL PARTS:
+# - function: _fixture_segments
+# - function: test_hu_validation_reference_is_locked_and_not_mislabeled_as_library_guide
+# - function: test_designer_recovers_exact_published_validation_spacer_without_receiving_it
+# ============================================================================
+
 import json
 from pathlib import Path
 
@@ -6,6 +25,10 @@ from plant_multiguide import design_shared_guides
 PUBLISHED_GUIDE = "CTCTACTTTCTCCCTCATCT"
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: _fixture_segments
+# ----------------------------------------------------------------------------
 def _fixture_segments():
     p = Path(__file__).resolve().parents[1] / "benchmarks/data/multiknock_pup_fixture.fasta"
     seqs = {}
@@ -19,6 +42,10 @@ def _fixture_segments():
     return {gene: [("benchmark_locus", seq)] for gene, seq in seqs.items()}
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_hu_validation_reference_is_locked_and_not_mislabeled_as_library_guide
+# ----------------------------------------------------------------------------
 def test_hu_validation_reference_is_locked_and_not_mislabeled_as_library_guide():
     p = Path(__file__).resolve().parents[1] / "benchmarks/data/multiknock_pup_reference.json"
     d = json.loads(p.read_text())
@@ -30,6 +57,10 @@ def test_hu_validation_reference_is_locked_and_not_mislabeled_as_library_guide()
     assert "validation construct" in d["evidence_class"]
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_designer_recovers_exact_published_validation_spacer_without_receiving_it
+# ----------------------------------------------------------------------------
 def test_designer_recovers_exact_published_validation_spacer_without_receiving_it():
     _, guides = design_shared_guides(
         _fixture_segments(),

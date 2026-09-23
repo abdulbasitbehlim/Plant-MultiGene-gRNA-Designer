@@ -1,3 +1,17 @@
+# ============================================================================
+# RUN LOCKED BENCHMARK
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Runs the locked benchmark so the same reference workflow can be reproduced and compared over time.
+#
+# HOW TO READ THIS FILE:
+# 1. Tests first prepare an input or fixture.
+# 2. The relevant program function is called.
+# 3. Assertions check that the result still matches the expected behaviour.
+# 4. Test logic and expected scientific results are intentionally unchanged.
+# ============================================================================
+
 """Deterministic Hu et al. 2023 validation-construct sequence regression.
 
 The designer receives only bundled PUP7/PUP8/PUP21 locus contexts. The published

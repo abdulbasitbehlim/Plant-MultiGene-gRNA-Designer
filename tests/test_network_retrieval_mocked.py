@@ -1,3 +1,28 @@
+# ============================================================================
+# TEST NETWORK RETRIEVAL MOCKED
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Contains automated tests that protect the Plant MultiGene gRNA Designer workflow from accidental behaviour changes.
+#
+# HOW TO READ THIS FILE:
+# 1. Tests first prepare an input or fixture.
+# 2. The relevant program function is called.
+# 3. Assertions check that the result still matches the expected behaviour.
+# 4. Test logic and expected scientific results are intentionally unchanged.
+#
+# MAIN TOP-LEVEL PARTS:
+# - class: FakeResponse
+# - function: _genbank_text
+# - function: test_fetch_ncbi_gene_mocked_preserves_version_assembly_and_exons
+# - function: test_fetch_ncbi_gene_mocked_falls_back_without_exons
+# - function: test_fetch_ncbi_gene_error_branches
+# - function: test_fetch_ensembl_gene_mocked_release_and_ambiguity
+# - function: test_fetch_ensembl_gene_error_branches
+# - function: test_fetch_gene_routes_and_rejects_unknown
+# - function: test_requests_get_retry_success_and_failure
+# ============================================================================
+
 from io import StringIO
 
 import pytest
@@ -9,6 +34,10 @@ from Bio.SeqRecord import SeqRecord
 import sequence_sources as ss
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: FakeResponse
+# ----------------------------------------------------------------------------
 class FakeResponse:
     def __init__(self, *, json_data=None, text=""):
         self._json = json_data or {}
@@ -21,6 +50,10 @@ class FakeResponse:
         return None
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: _genbank_text
+# ----------------------------------------------------------------------------
 def _genbank_text(*, with_exons=True, with_cds=True, record_id="NM_TEST.1"):
     seq = Seq("A" * 10 + "CTCTACTTTCTCCCTCATCTTGG" + "C" * 47)
     rec = SeqRecord(seq, id=record_id, name="TEST", description="mock RefSeq transcript")
@@ -40,6 +73,10 @@ def _genbank_text(*, with_exons=True, with_cds=True, record_id="NM_TEST.1"):
     return buf.getvalue()
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_fetch_ncbi_gene_mocked_preserves_version_assembly_and_exons
+# ----------------------------------------------------------------------------
 def test_fetch_ncbi_gene_mocked_preserves_version_assembly_and_exons(monkeypatch):
     gb = _genbank_text()
 
@@ -65,6 +102,10 @@ def test_fetch_ncbi_gene_mocked_preserves_version_assembly_and_exons(monkeypatch
     assert len(rec.sequence_sha256) == 64
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_fetch_ncbi_gene_mocked_falls_back_without_exons
+# ----------------------------------------------------------------------------
 def test_fetch_ncbi_gene_mocked_falls_back_without_exons(monkeypatch):
     gb = _genbank_text(with_exons=False)
 
@@ -86,12 +127,20 @@ def test_fetch_ncbi_gene_mocked_falls_back_without_exons(monkeypatch):
     assert rec.assembly == "unknown"
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_fetch_ncbi_gene_error_branches
+# ----------------------------------------------------------------------------
 def test_fetch_ncbi_gene_error_branches(monkeypatch):
     monkeypatch.setattr(ss, "_requests_get", lambda *a, **k: FakeResponse(json_data={"esearchresult": {"idlist": []}}))
     with pytest.raises(ValueError, match="could not resolve"):
         ss.fetch_ncbi_gene("NOTREAL", "Arabidopsis thaliana")
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_fetch_ensembl_gene_mocked_release_and_ambiguity
+# ----------------------------------------------------------------------------
 def test_fetch_ensembl_gene_mocked_release_and_ambiguity(monkeypatch):
     lookup = {
         "id": "AT4G18197",
@@ -132,12 +181,20 @@ def test_fetch_ensembl_gene_mocked_release_and_ambiguity(monkeypatch):
     assert any("ambiguous" in w.lower() for w in rec.warnings)
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_fetch_ensembl_gene_error_branches
+# ----------------------------------------------------------------------------
 def test_fetch_ensembl_gene_error_branches(monkeypatch):
     monkeypatch.setattr(ss, "_requests_get", lambda *a, **k: FakeResponse(json_data={"Transcript": []}))
     with pytest.raises(ValueError, match="no transcript"):
         ss.fetch_ensembl_gene("X", "rice")
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_fetch_gene_routes_and_rejects_unknown
+# ----------------------------------------------------------------------------
 def test_fetch_gene_routes_and_rejects_unknown(monkeypatch):
     sentinel = ss.GeneSequenceRecord("G", "O", "mock", "A.1", "d", [("s", "A" * 23)])
     monkeypatch.setattr(ss, "fetch_ncbi_gene", lambda gene, organism: sentinel)
@@ -148,6 +205,10 @@ def test_fetch_gene_routes_and_rejects_unknown(monkeypatch):
         ss.fetch_gene("G", "O", "Other")
 
 
+
+# ----------------------------------------------------------------------------
+# TEST / HELPER SECTION: test_requests_get_retry_success_and_failure
+# ----------------------------------------------------------------------------
 def test_requests_get_retry_success_and_failure(monkeypatch):
     calls = {"n": 0}
 

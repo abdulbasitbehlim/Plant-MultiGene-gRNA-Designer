@@ -1,21 +1,3 @@
-# ============================================================================
-# TEST UI CONTRACT
-# BEGINNER-FRIENDLY CODE GUIDE
-# ============================================================================
-#
-# PURPOSE: Contains automated tests that protect the Plant MultiGene gRNA
-# Designer from accidental behaviour changes.
-#
-# HOW TO READ THIS FILE:
-# 1. A test prepares sample input.
-# 2. It calls the function being checked.
-# 3. Assertions compare the result with the expected behaviour.
-# 4. Test expectations are kept unchanged; only explanatory structure is added.
-#
-# MAIN TOP-LEVEL PARTS:
-# - function: test_streamlit_ui_source_contract
-# ============================================================================
-
 from pathlib import Path
 import ast
 

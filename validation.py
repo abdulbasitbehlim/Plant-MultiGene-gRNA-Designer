@@ -1,25 +1,3 @@
-# ============================================================================
-# VALIDATION
-# BEGINNER-FRIENDLY CODE GUIDE
-# ============================================================================
-#
-# PURPOSE: Applies explicit validation rules and PASS / REVIEW / FAIL checks to generated guide-design results.
-#
-# HOW TO READ THIS FILE:
-# 1. Read the imports/constants first to see which tools and settings are used.
-# 2. Read one top-level function or class at a time.
-# 3. Follow the workflow from input sequence -> candidate guides -> validation -> output.
-# 4. Scientific formulas, thresholds, validation decisions and public function names
-#    are intentionally preserved while readability comments are added.
-#
-# MAIN TOP-LEVEL PARTS:
-# - class: ValidationCheck
-# - class: ValidationReport
-# - function: _add
-# - function: validate_shared_guide
-# - function: validation_summary_row
-# ============================================================================
-
 #!/usr/bin/env python3
 """Validation rules for Plant MultiGene gRNA Designer.
 
@@ -60,18 +38,10 @@ class ValidationReport:
         return "; ".join(msgs) if msgs else "None"
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _add
-# ----------------------------------------------------------------------------
 def _add(checks: List[ValidationCheck], name: str, status: str, value: object, explanation: str) -> None:
     checks.append(ValidationCheck(name, status, str(value), explanation))
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: validate_shared_guide
-# ----------------------------------------------------------------------------
 def validate_shared_guide(
     guide: SharedGuide,
     expected_genes: int,
@@ -255,10 +225,6 @@ def validate_shared_guide(
     return ValidationReport(status, tuple(checks), pass_count, review_count, fail_count, specificity_status)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: validation_summary_row
-# ----------------------------------------------------------------------------
 def validation_summary_row(report: ValidationReport) -> dict:
     return {
         "Validation": report.status,

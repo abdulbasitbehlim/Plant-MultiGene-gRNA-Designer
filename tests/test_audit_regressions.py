@@ -1,43 +1,3 @@
-# ============================================================================
-# TEST AUDIT REGRESSIONS
-# BEGINNER-FRIENDLY CODE GUIDE
-# ============================================================================
-#
-# PURPOSE: Contains automated tests that protect the Plant MultiGene gRNA Designer workflow from accidental behaviour changes.
-#
-# HOW TO READ THIS FILE:
-# 1. Tests first prepare an input or fixture.
-# 2. The relevant program function is called.
-# 3. Assertions check that the result still matches the expected behaviour.
-# 4. Test logic and expected scientific results are intentionally unchanged.
-#
-# MAIN TOP-LEVEL PARTS:
-# - function: mutated
-# - function: adversarial
-# - function: test_feasible_target_not_hidden_by_closer_invalid_site
-# - function: test_minimum_proxy_constraint_applied_before_site_choice
-# - function: test_order_independent_rank_and_site_choice
-# - function: test_invalid_parameters_fail
-# - function: test_bad_fasta_rejected
-# - function: test_grouped_exons_count_genes_and_do_not_join
-# - function: test_grouped_headers_and_labels_validated
-# - function: test_short_exons_never_fall_back_to_spliced_cds
-# - function: test_compound_cds_omits_introns_and_does_not_join
-# - function: test_multiple_cds_rejected
-# - function: test_known_duplicate_genes_and_mixed_species_rejected
-# - function: test_ambiguous_gene_lookup_rejected
-# - function: test_empty_panel_never_passes
-# - function: test_truncated_panel_retains_total_and_fingerprint
-# - function: test_input_and_panel_guards
-# - function: test_exact_fallback_and_uncovered_genes
-# - function: test_pam_loss_and_reverse_strand
-# - function: test_run_snapshot_and_panel_keys_prevent_stale_evidence
-# - function: test_validation_recomputes_evidence_and_checks_names
-# - function: test_external_input_format_and_scope
-# - function: test_duplicate_resolved_accessions_are_not_distinct_genes
-# - function: test_plant_transcript_suffix_is_not_removed
-# ============================================================================
-
 """Regression cases exposing concrete v1.3.1 limitations; all synthetic unless labelled."""
 import copy
 import json
@@ -55,10 +15,6 @@ from run_state import (create_run_snapshot, panel_result_key, export_run, export
 S = 'ACGTACGTACGTACGTACGA'
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: mutated
-# ----------------------------------------------------------------------------
 def mutated(positions):
     seq = list(S)
     for p in positions:
@@ -66,19 +22,11 @@ def mutated(positions):
     return ''.join(seq)
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: adversarial
-# ----------------------------------------------------------------------------
 def adversarial():
     return {'A': [('e', S+'AGG')], 'B': [('invalid', mutated([1,2,3])+'AGG'),
                                        ('valid', mutated([13,14])+'AGG')]}
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_feasible_target_not_hidden_by_closer_invalid_site
-# ----------------------------------------------------------------------------
 def test_feasible_target_not_hidden_by_closer_invalid_site():
     sites, guides = design_shared_guides(adversarial(), max_seed_mismatches_per_gene=2, min_compatibility=0)
     guide = next(g for g in guides if g.spacer == S)
@@ -87,10 +35,6 @@ def test_feasible_target_not_hidden_by_closer_invalid_site():
     assert next(m for m in custom.matches if m.gene == 'B').mismatches == 2
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_minimum_proxy_constraint_applied_before_site_choice
-# ----------------------------------------------------------------------------
 def test_minimum_proxy_constraint_applied_before_site_choice():
     # Two middle mismatches have a lower weighted distance (4) than one distal
     # plus one seed (4, tie); feasibility must be checked independently.
@@ -100,10 +44,6 @@ def test_minimum_proxy_constraint_applied_before_site_choice():
     assert custom.minimum_compatibility >= 85
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_order_independent_rank_and_site_choice
-# ----------------------------------------------------------------------------
 def test_order_independent_rank_and_site_choice():
     genes = {'B':[('z',S+'AGG'),('a',S+'TGG')], 'A':[('x',S+'CGG')]}
     _, a = design_shared_guides(genes)
@@ -113,10 +53,6 @@ def test_order_independent_rank_and_site_choice():
 
 @pytest.mark.parametrize('kwargs', [{'max_results':0},{'max_mismatches_per_gene':-1},
     {'max_seed_mismatches_per_gene':9},{'min_compatibility':float('nan')}])
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_invalid_parameters_fail
-# ----------------------------------------------------------------------------
 def test_invalid_parameters_fail(kwargs):
     with pytest.raises(ValueError):
         design_shared_guides(adversarial(), **kwargs)
@@ -127,10 +63,6 @@ def test_bad_fasta_rejected(raw):
     with pytest.raises(ValueError): parse_multifasta(raw)
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_grouped_exons_count_genes_and_do_not_join
-# ----------------------------------------------------------------------------
 def test_grouped_exons_count_genes_and_do_not_join():
     raw = '>A|e1\n'+'A'*20+'\n>A|e2\nAGG\n>B|e1\n'+S+'AGG'
     recs = manual_records(raw, group_segments=True)
@@ -140,19 +72,11 @@ def test_grouped_exons_count_genes_and_do_not_join():
     assert [[s for _,s in r.segments] for r in recs.values()] == [[s for _,s in r.segments] for r in again.values()]
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_grouped_headers_and_labels_validated
-# ----------------------------------------------------------------------------
 def test_grouped_headers_and_labels_validated():
     with pytest.raises(ValueError): manual_records('>A\nAAAA', group_segments=True)
     with pytest.raises(ValueError): manual_records('>A\nAAAA', gene_names=['x','y'])
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_short_exons_never_fall_back_to_spliced_cds
-# ----------------------------------------------------------------------------
 def test_short_exons_never_fall_back_to_spliced_cds():
     rec = SeqRecord(Seq(S+'AGG'))
     rec.features = [SeqFeature(FeatureLocation(0,23),type='CDS'),
@@ -173,20 +97,12 @@ def test_compound_cds_omits_introns_and_does_not_join(strand):
     assert not scan_gene_segments({'A':segments})['A']
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_multiple_cds_rejected
-# ----------------------------------------------------------------------------
 def test_multiple_cds_rejected():
     rec = SeqRecord(Seq('A'*50))
     rec.features = [SeqFeature(FeatureLocation(0,25),type='CDS'), SeqFeature(FeatureLocation(25,50),type='CDS')]
     with pytest.raises(ValueError,match='Multiple CDS'): extract_coding_segments(rec)
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_known_duplicate_genes_and_mixed_species_rejected
-# ----------------------------------------------------------------------------
 def test_known_duplicate_genes_and_mixed_species_rejected():
     records = manual_records('>A\n'+S+'AGG\n>B\n'+S+'TGG', organism='Arabidopsis')
     records['B'].gene = 'A'
@@ -195,10 +111,6 @@ def test_known_duplicate_genes_and_mixed_species_rejected():
     with pytest.raises(ValueError,match='different organisms'): validate_record_set(records)
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_ambiguous_gene_lookup_rejected
-# ----------------------------------------------------------------------------
 def test_ambiguous_gene_lookup_rejected(monkeypatch):
     class Response:
         def json(self): return {'esearchresult':{'idlist':['1','2']}}
@@ -211,10 +123,6 @@ def test_empty_panel_never_passes(panel):
     with pytest.raises(ValueError,match='nonempty'): screen_reference_panel_report(S,panel)
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_truncated_panel_retains_total_and_fingerprint
-# ----------------------------------------------------------------------------
 def test_truncated_panel_retains_total_and_fingerprint():
     panel = {'chr':(S+'AGG'+'N'*23)*7}
     r = screen_reference_panel_report(S,panel,0,2)
@@ -223,19 +131,11 @@ def test_truncated_panel_retains_total_and_fingerprint():
     assert r.scanned_sites >= 7
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_input_and_panel_guards
-# ----------------------------------------------------------------------------
 def test_input_and_panel_guards():
     with pytest.raises(ValueError,match='limit'): scan_gene_segments({'A':[('e','A'*(MAX_INPUT_BP+1))]})
     with pytest.raises(ValueError,match='exceeds'): screen_reference_panel_report(S,{'A':'A'*(MAX_INPUT_BP+1)})
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_exact_fallback_and_uncovered_genes
-# ----------------------------------------------------------------------------
 def test_exact_fallback_and_uncovered_genes():
     sites = scan_gene_segments({'A':[('e',S+'AGG')], 'B':[('e',mutated([1,2,3,4])+'AGG')]})
     result = suggest_exact_guide_set(sites,2)
@@ -245,10 +145,6 @@ def test_exact_fallback_and_uncovered_genes():
     assert suggest_exact_guide_set(sites,5)['uncovered_genes'] == ['no_pam']
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_pam_loss_and_reverse_strand
-# ----------------------------------------------------------------------------
 def test_pam_loss_and_reverse_strand():
     assert not scan_spcas9(S+'AGA','A')
     from plant_multiguide import reverse_complement
@@ -257,10 +153,6 @@ def test_pam_loss_and_reverse_strand():
     assert (m.start,m.end,m.strand,m.pam)==(4,23,'-','TGG')
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_run_snapshot_and_panel_keys_prevent_stale_evidence
-# ----------------------------------------------------------------------------
 def test_run_snapshot_and_panel_keys_prevent_stale_evidence():
     recs = manual_records('>A\n'+S+'AGG\n>B\n'+S+'TGG')
     settings={'max_mismatches_per_gene':2}
@@ -275,10 +167,6 @@ def test_run_snapshot_and_panel_keys_prevent_stale_evidence():
     assert json.loads(json.dumps(payload))['inputs']['A']['segments'][0][1]==S+'AGG'
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_validation_recomputes_evidence_and_checks_names
-# ----------------------------------------------------------------------------
 def test_validation_recomputes_evidence_and_checks_names():
     _, guides = design_shared_guides({'A':[('e',S+'AGG')], 'B':[('e',S+'AGG')]})
     g=guides[0]
@@ -289,10 +177,6 @@ def test_validation_recomputes_evidence_and_checks_names():
     assert validate_shared_guide(g,2,input_warnings=['spliced CDS']).status=='REVIEW'
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_external_input_format_and_scope
-# ----------------------------------------------------------------------------
 def test_external_input_format_and_scope():
     lines=cas_offinder_input([S,S],'/genome/plant.fa',3,True).splitlines()
     assert lines==['/genome/plant.fa','N'*20+'NRG',S+'NNN 3']
@@ -300,10 +184,6 @@ def test_external_input_format_and_scope():
     with pytest.raises(ValueError): cas_offinder_input([S],'x\ny')
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_duplicate_resolved_accessions_are_not_distinct_genes
-# ----------------------------------------------------------------------------
 def test_duplicate_resolved_accessions_are_not_distinct_genes():
     recs=manual_records('>A\n'+S+'AGG\n>B\n'+S+'AGG')
     for rec in recs.values():
@@ -311,10 +191,6 @@ def test_duplicate_resolved_accessions_are_not_distinct_genes():
     with pytest.raises(ValueError,match='same source record'): validate_record_set(recs)
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_plant_transcript_suffix_is_not_removed
-# ----------------------------------------------------------------------------
 def test_plant_transcript_suffix_is_not_removed(monkeypatch):
     import accession_sources as ac
     seen=[]

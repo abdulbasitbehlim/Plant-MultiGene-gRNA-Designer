@@ -1,46 +1,3 @@
-# ============================================================================
-# PLANT MULTIGUIDE
-# BEGINNER-FRIENDLY CODE GUIDE
-# ============================================================================
-#
-# PURPOSE: Contains the main scientific logic for discovering shared SpCas9 guides across multiple plant genes.
-#
-# HOW TO READ THIS FILE:
-# 1. Read the imports/constants first to see which tools and settings are used.
-# 2. Read one top-level function or class at a time.
-# 3. Follow the workflow from input sequence -> candidate guides -> validation -> output.
-# 4. Scientific formulas, thresholds, validation decisions and public function names
-#    are intentionally preserved while readability comments are added.
-#
-# MAIN TOP-LEVEL PARTS:
-# - class: TargetSite
-# - class: GeneMatch
-# - class: SharedGuide
-# - class: PanelHit
-# - class: PanelScreen
-# - class: SearchDiagnostics
-# - function: clean_dna
-# - function: ambiguity_summary
-# - function: reverse_complement
-# - function: gc_percent
-# - function: sequence_quality_score
-# - function: scan_spcas9
-# - function: scan_gene_segments
-# - function: mismatch_positions
-# - function: seed_mismatch_count
-# - function: compatibility_proxy
-# - function: _weighted_distance
-# - function: _to_match
-# - function: _check_thresholds
-# - function: _site_key
-# - function: _select_match
-# - function: _build_shared
-# - function: exact_shared_guides
-# - function: _consensus
-# - function: estimate_search_diagnostics
-# - plus 10 additional helpers
-# ============================================================================
-
 #!/usr/bin/env python3
 """Core algorithms for Plant MultiGene gRNA Designer.
 
@@ -156,10 +113,6 @@ class SearchDiagnostics:
     hard_pair_comparison_limit: int = MAX_PAIR_COMPARISONS
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: clean_dna
-# ----------------------------------------------------------------------------
 def clean_dna(raw: str) -> str:
     if not raw:
         return ""
@@ -173,10 +126,6 @@ def clean_dna(raw: str) -> str:
     return seq
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: ambiguity_summary
-# ----------------------------------------------------------------------------
 def ambiguity_summary(raw: str) -> Dict[str, object]:
     """Describe IUPAC ambiguity without treating ambiguous symbols as mismatches.
 
@@ -195,27 +144,15 @@ def ambiguity_summary(raw: str) -> Dict[str, object]:
     return {"count": len(positions), "codes": codes, "positions": positions}
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: reverse_complement
-# ----------------------------------------------------------------------------
 def reverse_complement(seq: str) -> str:
     return clean_dna(seq).translate(str.maketrans("ACGTN", "TGCAN"))[::-1]
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: gc_percent
-# ----------------------------------------------------------------------------
 def gc_percent(seq: str) -> float:
     seq = clean_dna(seq)
     return 100.0 * (seq.count("G") + seq.count("C")) / len(seq) if seq else 0.0
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: sequence_quality_score
-# ----------------------------------------------------------------------------
 def sequence_quality_score(spacer: str) -> float:
     """Transparent 0-100 sequence-quality ranking; not an activity probability."""
     s = clean_dna(spacer)
@@ -240,10 +177,6 @@ def sequence_quality_score(spacer: str) -> float:
     return round(max(0.0, min(100.0, score)), 1)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: scan_spcas9
-# ----------------------------------------------------------------------------
 def scan_spcas9(sequence: str, gene: str, segment_id: str = "segment") -> List[TargetSite]:
     """Enumerate both-strand 20 nt + NGG sites without crossing segment boundaries."""
     seq = clean_dna(sequence)
@@ -277,10 +210,6 @@ def scan_spcas9(sequence: str, gene: str, segment_id: str = "segment") -> List[T
     return sites
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: scan_gene_segments
-# ----------------------------------------------------------------------------
 def scan_gene_segments(gene_segments: Mapping[str, Sequence[Tuple[str, str]]]) -> Dict[str, List[TargetSite]]:
     """Scan independent exon/CDS/genomic segments; guides never span segment junctions."""
     if sum(len(seq) for segments in gene_segments.values() for _, seq in segments) > MAX_INPUT_BP:
@@ -298,10 +227,6 @@ def scan_gene_segments(gene_segments: Mapping[str, Sequence[Tuple[str, str]]]) -
     return out
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: mismatch_positions
-# ----------------------------------------------------------------------------
 def mismatch_positions(guide: str, target: str) -> Tuple[int, ...]:
     g, t = clean_dna(guide), clean_dna(target)
     if len(g) != 20 or len(t) != 20:
@@ -309,19 +234,11 @@ def mismatch_positions(guide: str, target: str) -> Tuple[int, ...]:
     return tuple(i + 1 for i, (a, b) in enumerate(zip(g, t)) if a != b)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: seed_mismatch_count
-# ----------------------------------------------------------------------------
 def seed_mismatch_count(positions: Iterable[int]) -> int:
     # PAM-proximal 8 nt represented as guide positions 13-20.
     return sum(1 for p in positions if p >= 13)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: compatibility_proxy
-# ----------------------------------------------------------------------------
 def compatibility_proxy(guide: str, target: str) -> float:
     """Explainable mismatch-tolerance proxy; intentionally not called CFD or efficiency."""
     pos = mismatch_positions(guide, target)
@@ -338,10 +255,6 @@ def compatibility_proxy(guide: str, target: str) -> float:
     return round(max(0.0, score), 1)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _weighted_distance
-# ----------------------------------------------------------------------------
 def _weighted_distance(a: str, b: str) -> Tuple[int, int, int]:
     pos = mismatch_positions(a, b)
     seed = seed_mismatch_count(pos)
@@ -349,10 +262,6 @@ def _weighted_distance(a: str, b: str) -> Tuple[int, int, int]:
     return weighted, len(pos), seed
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _to_match
-# ----------------------------------------------------------------------------
 def _to_match(gene: str, guide: str, site: TargetSite) -> GeneMatch:
     pos = mismatch_positions(guide, site.spacer)
     return GeneMatch(
@@ -364,10 +273,6 @@ def _to_match(gene: str, guide: str, site: TargetSite) -> GeneMatch:
     )
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _check_thresholds
-# ----------------------------------------------------------------------------
 def _check_thresholds(max_mm: int, max_seed_mm: int, min_compat: float, max_results: int = 1) -> None:
     if not isinstance(max_mm, int) or not 0 <= max_mm <= 20:
         raise ValueError("Mismatch limit must be an integer from 0 to 20.")
@@ -379,18 +284,10 @@ def _check_thresholds(max_mm: int, max_seed_mm: int, min_compat: float, max_resu
         raise ValueError("max_results must be a positive integer.")
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _site_key
-# ----------------------------------------------------------------------------
 def _site_key(site: TargetSite) -> tuple:
     return (-site.sequence_score, site.segment_id, site.start, site.end, site.strand, site.pam)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _select_match
-# ----------------------------------------------------------------------------
 def _select_match(guide: str, gene: str, sites: Sequence[TargetSite], max_mm: int,
                   max_seed_mm: int, min_compat: float, fallback: bool = False) -> GeneMatch | None:
     """Choose among feasible sites first; a closer invalid site must not hide one."""
@@ -404,10 +301,6 @@ def _select_match(guide: str, gene: str, sites: Sequence[TargetSite], max_mm: in
                                     x[0].seed_mismatches, _site_key(x[1])))[0]
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _build_shared
-# ----------------------------------------------------------------------------
 def _build_shared(guide: str, design_type: str, matches: List[GeneMatch], notes: List[str] | None = None) -> SharedGuide:
     comps = [m.compatibility_proxy for m in matches]
     return SharedGuide(
@@ -424,10 +317,6 @@ def _build_shared(guide: str, design_type: str, matches: List[GeneMatch], notes:
     )
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: exact_shared_guides
-# ----------------------------------------------------------------------------
 def exact_shared_guides(sites_by_gene: Mapping[str, Sequence[TargetSite]]) -> List[SharedGuide]:
     genes = sorted(sites_by_gene)
     if len(genes) < 2:
@@ -454,10 +343,6 @@ def exact_shared_guides(sites_by_gene: Mapping[str, Sequence[TargetSite]]) -> Li
     return sorted(results, key=_rank_key, reverse=True)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _consensus
-# ----------------------------------------------------------------------------
 def _consensus(spacers: Sequence[str], preferred: str) -> str:
     cols = []
     for i in range(20):
@@ -468,10 +353,6 @@ def _consensus(spacers: Sequence[str], preferred: str) -> str:
     return "".join(cols)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: estimate_search_diagnostics
-# ----------------------------------------------------------------------------
 def estimate_search_diagnostics(
     sites_by_gene: Mapping[str, Sequence[TargetSite]],
     max_pair_comparisons: int = MAX_PAIR_COMPARISONS,
@@ -495,10 +376,6 @@ def estimate_search_diagnostics(
     )
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _enforce_search_limits
-# ----------------------------------------------------------------------------
 def _enforce_search_limits(
     sites_by_gene: Mapping[str, Sequence[TargetSite]],
     max_pair_comparisons: int = MAX_PAIR_COMPARISONS,
@@ -519,10 +396,6 @@ def _enforce_search_limits(
     return d
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: mismatch_aware_guides
-# ----------------------------------------------------------------------------
 def mismatch_aware_guides(
     sites_by_gene: Mapping[str, Sequence[TargetSite]],
     max_mismatches_per_gene: int = 2,
@@ -577,10 +450,6 @@ def mismatch_aware_guides(
     results.sort(key=_rank_key, reverse=True)
     return results[:max_results]
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _rank_key
-# ----------------------------------------------------------------------------
 def _rank_key(g: SharedGuide) -> tuple:
     gc_pref = -abs(g.gc_percent - 50.0)
     return (
@@ -595,10 +464,6 @@ def _rank_key(g: SharedGuide) -> tuple:
     )
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: design_shared_guides
-# ----------------------------------------------------------------------------
 def design_shared_guides(
     gene_segments: Mapping[str, Sequence[Tuple[str, str]]],
     include_mismatch_aware: bool = True,
@@ -631,10 +496,6 @@ def design_shared_guides(
 
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: evaluate_candidate_guide
-# ----------------------------------------------------------------------------
 def evaluate_candidate_guide(
     guide: str,
     sites_by_gene: Mapping[str, Sequence[TargetSite]],
@@ -674,10 +535,6 @@ def evaluate_candidate_guide(
         notes,
     )
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: guide_summary_row
-# ----------------------------------------------------------------------------
 def guide_summary_row(g: SharedGuide) -> Dict[str, object]:
     return {
         "Spacer (20 nt)": g.spacer,
@@ -692,10 +549,6 @@ def guide_summary_row(g: SharedGuide) -> Dict[str, object]:
     }
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: match_rows
-# ----------------------------------------------------------------------------
 def match_rows(g: SharedGuide) -> List[Dict[str, object]]:
     rows = []
     for m in g.matches:
@@ -715,10 +568,6 @@ def match_rows(g: SharedGuide) -> List[Dict[str, object]]:
     return rows
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: screen_reference_panel_report
-# ----------------------------------------------------------------------------
 def screen_reference_panel_report(
     guide: str, panel: Mapping[str, str], max_mismatches: int = 3, max_hits: int = 250,
 ) -> PanelScreen:
@@ -749,20 +598,12 @@ def screen_reference_panel_report(
                        digest, max_mismatches, max_hits)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: screen_reference_panel
-# ----------------------------------------------------------------------------
 def screen_reference_panel(guide: str, panel: Mapping[str, str], max_mismatches: int = 3,
                            max_hits: int = 250) -> List[PanelHit]:
     """Compatibility API; use the report API for total counts and provenance."""
     return list(screen_reference_panel_report(guide, panel, max_mismatches, max_hits).hits)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: suggest_exact_guide_set
-# ----------------------------------------------------------------------------
 def suggest_exact_guide_set(sites_by_gene: Mapping[str, Sequence[TargetSite]], max_guides: int = 5) -> dict:
     """Deterministic greedy exact set cover; not a minimum-size or efficacy guarantee."""
     _check_thresholds(0, 0, 0, max_guides)

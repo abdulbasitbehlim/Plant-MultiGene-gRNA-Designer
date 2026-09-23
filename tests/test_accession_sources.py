@@ -1,24 +1,3 @@
-# ============================================================================
-# TEST ACCESSION SOURCES
-# BEGINNER-FRIENDLY CODE GUIDE
-# ============================================================================
-#
-# PURPOSE: Contains automated tests that protect the Plant MultiGene gRNA Designer workflow from accidental behaviour changes.
-#
-# HOW TO READ THIS FILE:
-# 1. Tests first prepare an input or fixture.
-# 2. The relevant program function is called.
-# 3. Assertions check that the result still matches the expected behaviour.
-# 4. Test logic and expected scientific results are intentionally unchanged.
-#
-# MAIN TOP-LEVEL PARTS:
-# - class: FakeResponse
-# - function: _gb_text
-# - function: test_fetch_ncbi_accession
-# - function: test_fetch_ensembl_transcript_accession
-# - function: test_fetch_accession_routes_and_rejects
-# ============================================================================
-
 from io import StringIO
 
 import pytest
@@ -31,10 +10,6 @@ import accession_sources as ac
 import sequence_sources as ss
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: FakeResponse
-# ----------------------------------------------------------------------------
 class FakeResponse:
     def __init__(self, *, json_data=None, text=""):
         self._json = json_data or {}
@@ -44,10 +19,6 @@ class FakeResponse:
         return self._json
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: _gb_text
-# ----------------------------------------------------------------------------
 def _gb_text():
     seq = Seq("A" * 10 + "CTCTACTTTCTCCCTCATCTTGG" + "C" * 50)
     rec = SeqRecord(seq, id="NM_TEST.2", name="TEST", description="mock accession")
@@ -64,10 +35,6 @@ def _gb_text():
     return buf.getvalue()
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_fetch_ncbi_accession
-# ----------------------------------------------------------------------------
 def test_fetch_ncbi_accession(monkeypatch):
     monkeypatch.setattr(ac, "_requests_get", lambda *a, **k: FakeResponse(text=_gb_text()))
     rec = ac.fetch_ncbi_accession("NM_TEST.2")
@@ -80,10 +47,6 @@ def test_fetch_ncbi_accession(monkeypatch):
     assert len(rec.sequence_sha256) == 64
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_fetch_ensembl_transcript_accession
-# ----------------------------------------------------------------------------
 def test_fetch_ensembl_transcript_accession(monkeypatch):
     lookup = {
         "id": "AT4G18197.1",
@@ -115,10 +78,6 @@ def test_fetch_ensembl_transcript_accession(monkeypatch):
     assert len(rec.segments) == 1
 
 
-
-# ----------------------------------------------------------------------------
-# TEST / HELPER SECTION: test_fetch_accession_routes_and_rejects
-# ----------------------------------------------------------------------------
 def test_fetch_accession_routes_and_rejects(monkeypatch):
     sentinel = object()
     monkeypatch.setattr(ac, "fetch_ncbi_accession", lambda accession: sentinel)

@@ -1,23 +1,3 @@
-# ============================================================================
-# APP
-# BEGINNER-FRIENDLY CODE GUIDE
-# ============================================================================
-#
-# PURPOSE: Builds the Streamlit interface and connects sequence input, multi-gene guide design, validation and reporting.
-#
-# HOW TO READ THIS FILE:
-# 1. Read the imports/constants first to see which tools and settings are used.
-# 2. Read one top-level function or class at a time.
-# 3. Follow the workflow from input sequence -> candidate guides -> validation -> output.
-# 4. Scientific formulas, thresholds, validation decisions and public function names
-#    are intentionally preserved while readability comments are added.
-#
-# MAIN TOP-LEVEL PARTS:
-# - function: _table_value
-# - function: key_value_table
-# - function: clear_design_state
-# ============================================================================
-
 #!/usr/bin/env python3
 """Streamlit dashboard for plant multi-gene shared sgRNA design."""
 from __future__ import annotations
@@ -47,10 +27,6 @@ from validation import validate_shared_guide, validation_summary_row
 from run_state import (APP_VERSION, create_run_snapshot, panel_result_key, export_input_fasta, export_run, cas_offinder_input)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: _table_value
-# ----------------------------------------------------------------------------
 def _table_value(value):
     """Convert structured values into readable text for UI tables."""
     if value is None or value == "":
@@ -70,10 +46,6 @@ def _table_value(value):
     return str(value)
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: key_value_table
-# ----------------------------------------------------------------------------
 def key_value_table(data, field_label="Field", value_label="Value"):
     """Return a consistent two-column table instead of exposing raw JSON in the UI."""
     return pd.DataFrame(
@@ -87,10 +59,6 @@ def key_value_table(data, field_label="Field", value_label="Value"):
     )
 
 
-
-# ----------------------------------------------------------------------------
-# FUNCTION / CLASS SECTION: clear_design_state
-# ----------------------------------------------------------------------------
 def clear_design_state():
     for key in list(st.session_state):
         if key.startswith("plant_") and key not in {"plant_custom_spacer"}:

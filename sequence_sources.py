@@ -1,3 +1,34 @@
+# ============================================================================
+# SEQUENCE SOURCES
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Loads, cleans and records sequence data from supported sources before guide discovery begins.
+#
+# HOW TO READ THIS FILE:
+# 1. Read the imports/constants first to see which tools and settings are used.
+# 2. Read one top-level function or class at a time.
+# 3. Follow the workflow from input sequence -> candidate guides -> validation -> output.
+# 4. Scientific formulas, thresholds, validation decisions and public function names
+#    are intentionally preserved while readability comments are added.
+#
+# MAIN TOP-LEVEL PARTS:
+# - class: GeneSequenceRecord
+# - function: _ambiguity_fields
+# - function: _append_ambiguity_warning
+# - function: _ensembl_release
+# - function: _ncbi_genomic_record
+# - function: normalize_species_name
+# - function: parse_multifasta
+# - function: manual_records
+# - function: extract_coding_segments
+# - function: validate_record_set
+# - function: _requests_get
+# - function: fetch_ncbi_gene
+# - function: fetch_ensembl_gene
+# - function: fetch_gene
+# ============================================================================
+
 #!/usr/bin/env python3
 """Sequence retrieval helpers for plant gene-family guide design.
 
@@ -82,11 +113,19 @@ class GeneSequenceRecord:
         }
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: _ambiguity_fields
+# ----------------------------------------------------------------------------
 def _ambiguity_fields(raw_seq: str) -> Tuple[int, Tuple[str, ...]]:
     a = ambiguity_summary(raw_seq)
     return int(a["count"]), tuple(a["codes"])
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: _append_ambiguity_warning
+# ----------------------------------------------------------------------------
 def _append_ambiguity_warning(warnings: List[str], count: int, codes: Tuple[str, ...]) -> None:
     if count:
         warnings.append(
@@ -97,6 +136,10 @@ def _append_ambiguity_warning(warnings: List[str], count: int, codes: Tuple[str,
         )
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: _ensembl_release
+# ----------------------------------------------------------------------------
 def _ensembl_release(headers: Dict[str, str]) -> str:
     try:
         data = _requests_get(f"{ENSEMBL}/info/data", headers=headers).json()
@@ -106,6 +149,10 @@ def _ensembl_release(headers: Dict[str, str]) -> str:
         return "unknown"
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: _ncbi_genomic_record
+# ----------------------------------------------------------------------------
 def _ncbi_genomic_record(gene_id: str, common: Dict[str, str]) -> str:
     try:
         data = _requests_get(
@@ -119,11 +166,19 @@ def _ncbi_genomic_record(gene_id: str, common: Dict[str, str]) -> str:
         return "unknown"
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: normalize_species_name
+# ----------------------------------------------------------------------------
 def normalize_species_name(organism: str) -> str:
     key = organism.strip().lower().replace("_", " ")
     return SPECIES_ALIASES.get(key, key.replace(" ", "_"))
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: parse_multifasta
+# ----------------------------------------------------------------------------
 def parse_multifasta(raw: str) -> Dict[str, str]:
     if not raw.strip():
         return {}
@@ -147,6 +202,10 @@ def parse_multifasta(raw: str) -> Dict[str, str]:
     return records
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: manual_records
+# ----------------------------------------------------------------------------
 def manual_records(raw: str, gene_names: Sequence[str] | None = None, organism: str = "manual",
                    group_segments: bool = False) -> Dict[str, GeneSequenceRecord]:
     raw = "\n".join(line.strip() for line in raw.splitlines())
@@ -192,6 +251,10 @@ def manual_records(raw: str, gene_names: Sequence[str] | None = None, organism: 
     return out
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: extract_coding_segments
+# ----------------------------------------------------------------------------
 def extract_coding_segments(rec) -> Tuple[List[Tuple[str, str]], List[str]]:
     """Keep CDS parts and exons independent, including pieces shorter than 23 nt."""
     seq = clean_dna(str(rec.seq))
@@ -227,6 +290,10 @@ def extract_coding_segments(rec) -> Tuple[List[Tuple[str, str]], List[str]]:
     return segments, warnings
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: validate_record_set
+# ----------------------------------------------------------------------------
 def validate_record_set(records: Dict[str, GeneSequenceRecord]) -> None:
     """Reject known duplicate gene labels and mixed species, without guessing homology."""
     genes = [r.gene.casefold() for r in records.values()]
@@ -241,6 +308,10 @@ def validate_record_set(records: Dict[str, GeneSequenceRecord]) -> None:
     if len(organisms) > 1:
         raise ValueError("Records resolve to different organisms. Use one plant organism per design.")
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: _requests_get
+# ----------------------------------------------------------------------------
 def _requests_get(url: str, *, params=None, headers=None, timeout: int = 30, retries: int = 3):
     err = None
     for attempt in range(retries):
@@ -255,6 +326,10 @@ def _requests_get(url: str, *, params=None, headers=None, timeout: int = 30, ret
     raise RuntimeError(f"Network request failed: {err}")
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: fetch_ncbi_gene
+# ----------------------------------------------------------------------------
 def fetch_ncbi_gene(gene: str, organism: str) -> GeneSequenceRecord:
     common = {"tool": NCBI_TOOL, "email": NCBI_EMAIL}
     query = f"{gene}[Gene Name] AND {organism}[Organism] AND alive[prop]"
@@ -306,6 +381,10 @@ def fetch_ncbi_gene(gene: str, organism: str) -> GeneSequenceRecord:
     )
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: fetch_ensembl_gene
+# ----------------------------------------------------------------------------
 def fetch_ensembl_gene(gene: str, organism: str) -> GeneSequenceRecord:
     species = normalize_species_name(organism)
     headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": NCBI_TOOL}
@@ -364,6 +443,10 @@ def fetch_ensembl_gene(gene: str, organism: str) -> GeneSequenceRecord:
     )
 
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: fetch_gene
+# ----------------------------------------------------------------------------
 def fetch_gene(gene: str, organism: str, source: str = "NCBI") -> GeneSequenceRecord:
     source_l = source.lower()
     if source_l.startswith("ncbi"):

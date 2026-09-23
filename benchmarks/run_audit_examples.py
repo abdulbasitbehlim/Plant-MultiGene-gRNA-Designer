@@ -1,3 +1,22 @@
+# ============================================================================
+# RUN AUDIT EXAMPLES
+# BEGINNER-FRIENDLY CODE GUIDE
+# ============================================================================
+#
+# PURPOSE: Runs reproducible audit examples used to inspect important workflow decisions.
+#
+# HOW TO READ THIS FILE:
+# 1. Read the imports/constants first to see which tools and settings are used.
+# 2. Read one top-level function or class at a time.
+# 3. Follow the workflow from input sequence -> candidate guides -> validation -> output.
+# 4. Scientific formulas, thresholds, validation decisions and public function names
+#    are intentionally preserved while readability comments are added.
+#
+# MAIN TOP-LEVEL PARTS:
+# - function: mutate
+# - function: record
+# ============================================================================
+
 """Small deterministic synthetic demonstrations; no plant editing efficacy claims."""
 import json
 from pathlib import Path
@@ -10,12 +29,20 @@ from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature,FeatureLocation
 S='ACGTACGTACGTACGTACGA'
 
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: mutate
+# ----------------------------------------------------------------------------
 def mutate(ps):
  a=list(S)
  for p in ps:a[p-1]={'A':'C','C':'G','G':'T','T':'A'}[a[p-1]]
  return ''.join(a)
 
 rows=[]
+
+# ----------------------------------------------------------------------------
+# FUNCTION / CLASS SECTION: record
+# ----------------------------------------------------------------------------
 def record(name,observed,expected):
  assert observed==expected,(name,observed,expected)
  rows.append({'example':name,'observed':observed,'expected':expected,'passed':True,'evidence':'synthetic software check'})
